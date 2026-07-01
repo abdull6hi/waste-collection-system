@@ -1,0 +1,22 @@
+# Dependencies
+node_modules/
+
+# Environment variables (never commit these)
+.env
+.env.*
+!.env.example
+!.env.test.example
+
+# Build output
+dist/
+build/
+
+# OS / editor artefacts
+.DS_Store
+Thumbs.db
+.vscode/
+*.log
+
+# Claude Code
+CLAUDE.md
+.claude/
