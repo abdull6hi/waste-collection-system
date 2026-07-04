@@ -2,11 +2,39 @@
 import bcrypt from 'bcrypt';
 import { withTransaction } from '../config/db.js';
 import * as CollectorModel from '../models/collector.model.js';
+import * as UserModel from '../models/user.model.js';
 
 export async function getMyProfile(req, res) {
   const collector = await CollectorModel.findMine(req.user.id);
   if (!collector) return res.status(404).json({ error: { message: 'Collector record not found' } });
   res.json({ collector });
+}
+
+/**
+ * Residents in the zones assigned to the requesting collector.
+ * Ownership is enforced from the JWT (req.user.id) → the collector's own record;
+ * there is no collector id in the request, so one collector cannot read another's.
+ */
+export async function getMyResidents(req, res) {
+  const collector = await CollectorModel.findByUserId(req.user.id);
+  if (!collector) return res.status(404).json({ error: { message: 'No collector profile found' } });
+
+  const residents = await UserModel.findResidentsForCollector(collector.id);
+
+  // Small per-zone grouping so the UI can show "N residents across M zones".
+  const zoneMap = new Map();
+  for (const r of residents) {
+    if (!zoneMap.has(r.zone_id)) {
+      zoneMap.set(r.zone_id, { zone_id: r.zone_id, zone_name: r.zone_name, count: 0 });
+    }
+    zoneMap.get(r.zone_id).count += 1;
+  }
+
+  res.json({
+    residents,
+    total: residents.length,
+    zones: [...zoneMap.values()],
+  });
 }
 
 export async function list(req, res) {

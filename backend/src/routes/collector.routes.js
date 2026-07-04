@@ -2,7 +2,7 @@ import { Router } from 'express';
 import { body } from 'express-validator';
 import { authenticate, requireRole } from '../middleware/auth.middleware.js';
 import { validate } from '../middleware/validate.middleware.js';
-import { list, getOne, create, update, deactivate, activate, getMyProfile } from '../controllers/collector.controller.js';
+import { list, getOne, create, update, deactivate, activate, getMyProfile, getMyResidents } from '../controllers/collector.controller.js';
 
 const router = Router();
 router.use(authenticate);
@@ -30,9 +30,10 @@ const updateRules = [
   body('active').optional().isBoolean().withMessage('active must be true or false'),
 ];
 
-router.get('/',    list);
-router.get('/me',  requireRole('collector'), getMyProfile);
-router.get('/:id', getOne);
+router.get('/',             list);
+router.get('/me',           requireRole('collector'), getMyProfile);
+router.get('/me/residents', requireRole('collector'), getMyResidents);
+router.get('/:id',          getOne);
 
 router.post('/',                requireRole('official'), createRules, validate, create);
 router.put('/:id',             requireRole('official'), updateRules,  validate, update);

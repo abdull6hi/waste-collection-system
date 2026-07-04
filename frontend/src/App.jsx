@@ -21,6 +21,7 @@ import ReportsPage     from './pages/official/ReportsPage.jsx';
 import ReportPrintPage from './pages/official/ReportPrintPage.jsx';
 
 import MyPickupsPage   from './pages/collector/MyPickupsPage.jsx';
+import MyResidentsPage from './pages/collector/MyResidentsPage.jsx';
 
 function AppRoutes() {
   return (
@@ -79,6 +80,11 @@ function AppRoutes() {
       <Route path="/my-pickups" element={
         <ProtectedRoute roles={['collector']}>
           <Layout><MyPickupsPage /></Layout>
+        </ProtectedRoute>
+      } />
+      <Route path="/my-residents" element={
+        <ProtectedRoute roles={['collector']}>
+          <Layout><MyResidentsPage /></Layout>
         </ProtectedRoute>
       } />
 

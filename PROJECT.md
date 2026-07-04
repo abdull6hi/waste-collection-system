@@ -12,7 +12,7 @@ Three distinct user roles share one interface:
 | Role | Primary concerns |
 |---|---|
 | **County Officials** | Zone management, schedule oversight, complaint resolution, reporting |
-| **Private Collectors** | Viewing assigned zones & schedules, logging pickups, updating status |
+| **Private Collectors** | Viewing assigned zones & schedules, logging pickups, updating status, viewing residents in their zones |
 | **Residents** | Checking collection schedules, filing complaints, tracking pickup status |
 
 ---
@@ -70,6 +70,7 @@ backend/src/config/db.js    →  Database connection pool
 | **7 — Reporting** | Aggregated reports, PDF/CSV export | ✅ Complete |
 | **8 — Hardening** | Input validation, rate limiting, security headers, error handling audit | ✅ Complete |
 | **Add-on — Profile & Self-Service Edit** | Profile avatar/dropdown in shared header; PATCH /api/users/me (name/email); PATCH /api/users/me/password (bcrypt verify → update); collector contact_phone self-edit; GET /api/collectors/me; live avatar/greeting update via AuthContext.updateUser | ✅ Complete |
+| **Add-on — Collector "My Residents" view** | Read-only view letting a collector see residents in their assigned zones, derived through `zones.assigned_collector_id` (no direct collector↔resident link). `GET /api/collectors/me/residents` (collector-only, ownership resolved from JWT — never a request param); returns name + zone only (no email/role/PII); `MyResidentsPage` grouped by zone with loading/empty/error states | ✅ Complete |
 | **Code Review — Security & Quality** | External code review fixes + improvements (see below) | ✅ Complete |
 
 ### Code Review Fixes Applied

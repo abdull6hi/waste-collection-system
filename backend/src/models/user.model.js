@@ -53,6 +53,27 @@ export async function updateProfile(id, { name, email }) {
   return rows[0] ?? null;
 }
 
+/**
+ * Residents in the zones assigned to a given collector, derived through
+ * zones.assigned_collector_id (there is no direct collector↔resident link).
+ *
+ * Explicit projection only — never exposes email, password_hash, or role.
+ * The users table has no phone column, so contact info is name + zone only.
+ * Ordered by zone name then resident name for a stable, grouped UI.
+ */
+export async function findResidentsForCollector(collectorId) {
+  const { rows } = await query(
+    `SELECT u.id, u.name, u.zone_id, z.name AS zone_name
+     FROM users u
+     JOIN zones z ON z.id = u.zone_id
+     WHERE u.role = 'resident'
+       AND z.assigned_collector_id = $1
+     ORDER BY z.name, u.name`,
+    [collectorId]
+  );
+  return rows;
+}
+
 /** Returns password_hash for server-side verification only — never forward to client. */
 export async function getPasswordHash(id) {
   const { rows } = await query(

@@ -16,6 +16,7 @@ const NAV = {
   collector: [
     { to: '/dashboard',   label: 'Dashboard' },
     { to: '/my-pickups',  label: 'My Pickups' },
+    { to: '/my-residents', label: 'My Residents' },
   ],
   resident: [
     { to: '/dashboard',   label: 'Dashboard' },
