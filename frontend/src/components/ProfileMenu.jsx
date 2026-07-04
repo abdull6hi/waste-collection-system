@@ -141,6 +141,20 @@ function EditProfileModal({ onClose }) {
                     <span style={s.readonlyLabel}>Licence No.</span>
                     <span style={s.readonlyValue}>{collectorInfo.license_no}</span>
                   </div>
+                  <div style={s.readonlyField}>
+                    <span style={s.readonlyLabel}>Licence expiry</span>
+                    <span style={s.readonlyValue}>
+                      {collectorInfo.license_expiry
+                        ? new Date(collectorInfo.license_expiry).toLocaleDateString()
+                        : 'Not set'}
+                      {collectorInfo.license_status === 'expired' && (
+                        <span style={{ marginLeft: '0.5rem', fontWeight: 600, color: '#dc2626' }}>· Expired</span>
+                      )}
+                      {collectorInfo.license_status === 'expiring_soon' && (
+                        <span style={{ marginLeft: '0.5rem', fontWeight: 600, color: '#b45309' }}>· Expiring soon</span>
+                      )}
+                    </span>
+                  </div>
                 </div>
               )}
             </>

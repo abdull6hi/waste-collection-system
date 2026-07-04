@@ -71,3 +71,55 @@ export function iterateDates(fromStr, toStr) {
   }
   return dates;
 }
+
+/* ── Collector licence expiry ─────────────────────────────────── */
+
+/** A licence within this many days of expiry is flagged "expiring soon". */
+export const LICENCE_EXPIRY_WARN_DAYS = 30;
+
+/**
+ * Extract calendar {y, m, d} from a DATE value, or null if none.
+ * Accepts a Date (node-postgres returns DATE columns as a local-midnight Date,
+ * whose local components are the stored calendar date) or a 'YYYY-MM-DD' string.
+ */
+function calendarParts(value) {
+  if (value === null || value === undefined || value === '') return null;
+  if (value instanceof Date) {
+    if (Number.isNaN(value.getTime())) return null;
+    return { y: value.getFullYear(), m: value.getMonth() + 1, d: value.getDate() };
+  }
+  const match = String(value).slice(0, 10).match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (!match) return null;
+  return { y: Number(match[1]), m: Number(match[2]), d: Number(match[3]) };
+}
+
+/**
+ * Classify a collector's licence by its expiry date (date-only comparison).
+ * Both the expiry and "today" are reduced to calendar dates and diffed as whole
+ * days, so the result is timezone-stable.
+ *
+ *  - none          → no expiry recorded (null)             → days_to_expiry: null
+ *  - expired       → expiry is before today               → days_to_expiry < 0
+ *  - expiring_soon → today ≤ expiry ≤ today + WARN_DAYS    → 0 ≤ days ≤ WARN_DAYS
+ *  - valid         → expiry is more than WARN_DAYS away    → days > WARN_DAYS
+ *
+ * @param {Date|string|null} licenseExpiry
+ * @returns {{ status: 'none'|'expired'|'expiring_soon'|'valid', days_to_expiry: number|null }}
+ */
+export function licenceStatus(licenseExpiry) {
+  const parts = calendarParts(licenseExpiry);
+  if (!parts) return { status: 'none', days_to_expiry: null };
+
+  const now       = new Date();
+  const todayUTC  = Date.UTC(now.getFullYear(), now.getMonth(), now.getDate());
+  const expiryUTC = Date.UTC(parts.y, parts.m - 1, parts.d);
+  const msPerDay  = 24 * 60 * 60 * 1000;
+  const days      = Math.round((expiryUTC - todayUTC) / msPerDay);
+
+  let status;
+  if (days < 0)                            status = 'expired';
+  else if (days <= LICENCE_EXPIRY_WARN_DAYS) status = 'expiring_soon';
+  else                                     status = 'valid';
+
+  return { status, days_to_expiry: days };
+}

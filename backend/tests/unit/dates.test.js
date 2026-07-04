@@ -2,7 +2,21 @@
  * Unit tests for src/utils/dates.js — pure functions, no DB required.
  */
 import { describe, it, expect } from 'vitest';
-import { mondayOf, weeksBetween, currentWeekRange, iterateDates } from '../../src/utils/dates.js';
+import {
+  mondayOf, weeksBetween, currentWeekRange, iterateDates,
+  licenceStatus, LICENCE_EXPIRY_WARN_DAYS,
+} from '../../src/utils/dates.js';
+
+/** Build a 'YYYY-MM-DD' string `days` from today, matching licenceStatus's notion of "today". */
+function ymdOffset(days) {
+  const now  = new Date();
+  const base = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  base.setDate(base.getDate() + days);
+  const y = base.getFullYear();
+  const m = String(base.getMonth() + 1).padStart(2, '0');
+  const d = String(base.getDate()).padStart(2, '0');
+  return `${y}-${m}-${d}`;
+}
 
 describe('mondayOf()', () => {
   it('returns itself when the date is already a Monday', () => {
@@ -117,5 +131,55 @@ describe('iterateDates()', () => {
     const dates = iterateDates('2024-01-01', '2024-01-07');
     const dows = dates.map(d => d.dow);
     expect(dows).toEqual([1, 2, 3, 4, 5, 6, 0]); // Mon…Sun
+  });
+});
+
+describe('licenceStatus()', () => {
+  it('returns "none" with null days for a null expiry', () => {
+    expect(licenceStatus(null)).toEqual({ status: 'none', days_to_expiry: null });
+  });
+
+  it('treats undefined and empty string as "none"', () => {
+    expect(licenceStatus(undefined).status).toBe('none');
+    expect(licenceStatus('').status).toBe('none');
+  });
+
+  it('classifies a past date as "expired" with negative days', () => {
+    const res = licenceStatus(ymdOffset(-1));
+    expect(res.status).toBe('expired');
+    expect(res.days_to_expiry).toBe(-1);
+  });
+
+  it('classifies today as "expiring_soon" with 0 days', () => {
+    const res = licenceStatus(ymdOffset(0));
+    expect(res.status).toBe('expiring_soon');
+    expect(res.days_to_expiry).toBe(0);
+  });
+
+  it('classifies a date within the warn window as "expiring_soon"', () => {
+    const res = licenceStatus(ymdOffset(15));
+    expect(res.status).toBe('expiring_soon');
+    expect(res.days_to_expiry).toBe(15);
+  });
+
+  it('treats exactly WARN_DAYS out as the inclusive "expiring_soon" boundary', () => {
+    const res = licenceStatus(ymdOffset(LICENCE_EXPIRY_WARN_DAYS));
+    expect(res.status).toBe('expiring_soon');
+    expect(res.days_to_expiry).toBe(LICENCE_EXPIRY_WARN_DAYS);
+  });
+
+  it('treats WARN_DAYS + 1 out as "valid"', () => {
+    const res = licenceStatus(ymdOffset(LICENCE_EXPIRY_WARN_DAYS + 1));
+    expect(res.status).toBe('valid');
+    expect(res.days_to_expiry).toBe(LICENCE_EXPIRY_WARN_DAYS + 1);
+  });
+
+  it('accepts a Date object (as node-postgres returns DATE columns)', () => {
+    const now = new Date();
+    const local = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    local.setDate(local.getDate() + 10);
+    const res = licenceStatus(local);
+    expect(res.status).toBe('expiring_soon');
+    expect(res.days_to_expiry).toBe(10);
   });
 });

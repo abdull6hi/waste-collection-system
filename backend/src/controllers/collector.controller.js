@@ -3,11 +3,21 @@ import bcrypt from 'bcrypt';
 import { withTransaction } from '../config/db.js';
 import * as CollectorModel from '../models/collector.model.js';
 import * as UserModel from '../models/user.model.js';
+import { licenceStatus } from '../utils/dates.js';
+
+/**
+ * Adds server-computed licence status to a full collector record. Additive only —
+ * never applied to public projections, which must not carry licence expiry data.
+ */
+function withLicenceStatus(collector) {
+  const { status, days_to_expiry } = licenceStatus(collector.license_expiry);
+  return { ...collector, license_status: status, days_to_expiry };
+}
 
 export async function getMyProfile(req, res) {
   const collector = await CollectorModel.findMine(req.user.id);
   if (!collector) return res.status(404).json({ error: { message: 'Collector record not found' } });
-  res.json({ collector });
+  res.json({ collector: withLicenceStatus(collector) });
 }
 
 /**
@@ -38,10 +48,10 @@ export async function getMyResidents(req, res) {
 }
 
 export async function list(req, res) {
-  // Officials get the full record (license_no, contact_phone) for admin purposes.
-  // Residents and collectors get a trimmed public view with no PII.
+  // Officials get the full record (license_no, contact_phone, licence status) for
+  // admin purposes. Residents and collectors get a trimmed public view with no PII.
   const collectors = req.user.role === 'official'
-    ? await CollectorModel.findAll()
+    ? (await CollectorModel.findAll()).map(withLicenceStatus)
     : await CollectorModel.findAllPublic();
   res.json({ collectors });
 }
@@ -49,9 +59,13 @@ export async function list(req, res) {
 export async function getOne(req, res) {
   const id = Number(req.params.id);
   // Same role-based projection as list()
-  const collector = req.user.role === 'official'
-    ? await CollectorModel.findById(id)
-    : await CollectorModel.findByIdPublic(id);
+  let collector;
+  if (req.user.role === 'official') {
+    const found = await CollectorModel.findById(id);
+    collector = found ? withLicenceStatus(found) : null;
+  } else {
+    collector = await CollectorModel.findByIdPublic(id);
+  }
   if (!collector) return res.status(404).json({ error: { message: 'Collector not found' } });
   res.json({ collector });
 }

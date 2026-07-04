@@ -155,7 +155,6 @@ const styles = {
     width: '100%',
     maxWidth: '460px',
     boxShadow: '0 20px 40px rgb(0 0 0 / 0.08)',
-    borderTop: '4px solid #16a34a',
   },
   logoRow: { display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '1.5rem' },
   logoIcon: { fontSize: '1.8rem' },

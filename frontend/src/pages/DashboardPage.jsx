@@ -27,6 +27,7 @@ const STATUS_BADGE = {
 /* ─── Official dashboard ─────────────────────────────────────── */
 function OfficialDashboard({ user }) {
   const [stats, setStats] = useState({ collectors: '—', zones: '—', schedules: '—', openComplaints: '—' });
+  const [licence, setLicence] = useState({ expiring: 0, expired: 0 });
 
   useEffect(() => {
     Promise.all([
@@ -36,6 +37,12 @@ function OfficialDashboard({ user }) {
       ComplaintAPI.openByZone(),
     ]).then(([c, z, s, comp]) => {
       const totalOpen = (comp.data.zones || []).reduce((sum, r) => sum + r.open_count, 0);
+      // Only alert on ACTIVE collectors; ignore unset ('none') licences.
+      const active = (c.data.collectors || []).filter(col => col.active);
+      setLicence({
+        expiring: active.filter(col => col.license_status === 'expiring_soon').length,
+        expired:  active.filter(col => col.license_status === 'expired').length,
+      });
       setStats({
         collectors:    c.data.collectors.length,
         zones:         z.data.zones.length,
@@ -58,6 +65,23 @@ function OfficialDashboard({ user }) {
         <h1 style={s.title}>Welcome back, {user?.name?.split(' ')[0]}</h1>
         <p style={s.sub}>Nairobi County Waste Coordination — Admin Dashboard</p>
       </div>
+
+      {(licence.expired > 0 || licence.expiring > 0) && (
+        <Link
+          to="/collectors"
+          style={{ ...s.licenceAlert, ...(licence.expired > 0 ? s.licenceAlertRed : s.licenceAlertAmber) }}
+        >
+          <span style={s.licenceAlertIcon} aria-hidden="true">⚠</span>
+          <span>
+            <strong>Licence attention needed.</strong>{' '}
+            {licence.expired > 0 && `${licence.expired} licence${licence.expired > 1 ? 's' : ''} expired`}
+            {licence.expired > 0 && licence.expiring > 0 && ' · '}
+            {licence.expiring > 0 && `${licence.expiring} expiring soon`}
+            . Review the collectors register →
+          </span>
+        </Link>
+      )}
+
       <div style={s.grid}>
         {cards.map(c => (
           <Link to={c.to} key={c.to} style={s.card}>
@@ -76,10 +100,40 @@ function OfficialDashboard({ user }) {
   );
 }
 
+/* ─── Collector licence renewal banner ───────────────────────── */
+function LicenceBanner({ licence }) {
+  if (!licence) return null;
+  const { license_status, days_to_expiry } = licence;
+  if (license_status !== 'expiring_soon' && license_status !== 'expired') return null;
+
+  const expired = license_status === 'expired';
+  const when =
+    days_to_expiry === 0 ? 'today'
+    : days_to_expiry === 1 ? 'in 1 day'
+    : `in ${days_to_expiry} days`;
+
+  return (
+    <div
+      role="alert"
+      style={{ ...s.licenceAlert, ...(expired ? s.licenceAlertRed : s.licenceAlertAmber), marginBottom: '1.5rem', cursor: 'default' }}
+    >
+      <span style={s.licenceAlertIcon} aria-hidden="true">⚠</span>
+      <span>
+        {expired ? (
+          <><strong>Your licence has expired.</strong> Please contact the county office to renew it.</>
+        ) : (
+          <><strong>Your licence expires {when}.</strong> Please contact the county office to renew it.</>
+        )}
+      </span>
+    </div>
+  );
+}
+
 /* ─── Collector dashboard ────────────────────────────────────── */
 function CollectorDashboard({ user }) {
   const [schedules,   setSchedules]   = useState([]);
   const [complaints,  setComplaints]  = useState([]);
+  const [licence,     setLicence]     = useState(null);
   const [loading,     setLoading]     = useState(true);
   const [resolveModal, setResolveModal] = useState(null);
   const [resolveNote,  setResolveNote]  = useState('');
@@ -88,12 +142,14 @@ function CollectorDashboard({ user }) {
 
   async function load() {
     try {
-      const [sRes, cRes] = await Promise.all([
+      const [sRes, cRes, meRes] = await Promise.all([
         client.get('/api/schedules/mine'),
         ComplaintAPI.listAssigned(),
+        client.get('/api/collectors/me'),
       ]);
       setSchedules(sRes.data.schedules);
       setComplaints(cRes.data.complaints);
+      setLicence(meRes.data.collector);
     } catch (err) {
       toast.error(extractError(err, 'Failed to load dashboard'));
     } finally { setLoading(false); }
@@ -137,6 +193,8 @@ function CollectorDashboard({ user }) {
         <h1 style={s.title}>Welcome back, {user?.name?.split(' ')[0]}</h1>
         <p style={s.sub}>Your assigned collection routes, pickups, and complaints</p>
       </div>
+
+      <LicenceBanner licence={licence} />
 
       <div style={s.grid}>
         <div style={s.card}>
@@ -454,6 +512,14 @@ const s = {
   cardLabel:  { fontSize: '0.95rem', fontWeight: 600, color: '#111827', marginTop: '0.25rem' },
   cardDesc:   { fontSize: '0.8rem', color: '#9ca3af' },
   quickLink:  { color: '#16a34a', fontWeight: 600, fontSize: '0.875rem' },
+  licenceAlert: {
+    display: 'flex', alignItems: 'flex-start', gap: '0.6rem',
+    padding: '0.85rem 1.1rem', borderRadius: '0.75rem', marginBottom: '1.5rem',
+    fontSize: '0.9rem', textDecoration: 'none', border: '1.5px solid',
+  },
+  licenceAlertAmber: { background: '#fffbeb', borderColor: '#fde68a', color: '#92400e' },
+  licenceAlertRed:   { background: '#fef2f2', borderColor: '#fecaca', color: '#b91c1c' },
+  licenceAlertIcon:  { fontSize: '1.1rem', lineHeight: 1.3 },
   label:      { display: 'flex', flexDirection: 'column', gap: '0.35rem', fontSize: '0.875rem', fontWeight: 500, color: '#374151' },
   select:     { padding: '0.6rem 0.85rem', border: '1.5px solid #d1d5db', borderRadius: '0.55rem', fontSize: '0.9rem', fontFamily: 'inherit', background: '#fff' },
   muted:      { color: '#9ca3af', fontSize: '0.875rem', marginTop: '0.5rem' },

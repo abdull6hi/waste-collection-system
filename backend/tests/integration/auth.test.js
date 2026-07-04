@@ -7,16 +7,20 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import request from 'supertest';
 import app from '../../src/app.js';
-import { truncateTables, closePool, makeToken, createUser } from '../helpers.js';
+import { truncateTables, closePool, makeToken, createUser, createZone } from '../helpers.js';
 
+// Registration requires a valid collection zone + contact phone; create one zone
+// up front and reuse its id across the register/login cases.
+let zoneId;
 beforeAll(truncateTables);
+beforeAll(async () => { zoneId = (await createZone({ name: 'Auth Test Zone' })).id; });
 afterAll(closePool);
 
 describe('POST /api/auth/register', () => {
   it('creates a resident account and returns a token', async () => {
     const res = await request(app)
       .post('/api/auth/register')
-      .send({ name: 'Ada Test', email: `ada_${Date.now()}@test.local`, password: 'Password1!' });
+      .send({ name: 'Ada Test', email: `ada_${Date.now()}@test.local`, password: 'Password1!', zone_id: zoneId, contact_phone: '+254700000000' });
 
     expect(res.status).toBe(201);
     expect(res.body.user.role).toBe('resident');
@@ -30,6 +34,8 @@ describe('POST /api/auth/register', () => {
         name: 'Sneaky User',
         email: `sneaky_${Date.now()}@test.local`,
         password: 'Password1!',
+        zone_id: zoneId,
+        contact_phone: '+254700000000',
         role: 'official',   // attacker-supplied — must be ignored
       });
 
@@ -55,10 +61,10 @@ describe('POST /api/auth/register', () => {
   it('rejects duplicate emails', async () => {
     const email = `dup_${Date.now()}@test.local`;
     await request(app).post('/api/auth/register')
-      .send({ name: 'First', email, password: 'Password1!' });
+      .send({ name: 'First', email, password: 'Password1!', zone_id: zoneId, contact_phone: '+254700000000' });
 
     const res = await request(app).post('/api/auth/register')
-      .send({ name: 'Second', email, password: 'Password1!' });
+      .send({ name: 'Second', email, password: 'Password1!', zone_id: zoneId, contact_phone: '+254700000000' });
     expect(res.status).toBe(409);
   });
 });
@@ -68,7 +74,7 @@ describe('POST /api/auth/login', () => {
   beforeAll(async () => {
     email = `login_${Date.now()}@test.local`;
     password = 'Password1!';
-    await request(app).post('/api/auth/register').send({ name: 'Login Test', email, password });
+    await request(app).post('/api/auth/register').send({ name: 'Login Test', email, password, zone_id: zoneId, contact_phone: '+254700000000' });
   });
 
   it('returns a token for valid credentials', async () => {

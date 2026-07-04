@@ -4,13 +4,18 @@ import client, { extractError } from '../../api/client.js';
 
 const EMPTY_FORM = { name: '', email: '', password: '', company_name: '', license_no: '', license_expiry: '', contact_phone: '' };
 
-function expiryBadge(license_expiry) {
-  if (!license_expiry) return null;
-  const days = (new Date(license_expiry) - new Date()) / (1000 * 60 * 60 * 24);
-  if (days < 0)  return { label: 'Expired',      style: s.badgeRed };
-  if (days < 30) return { label: 'Expiring soon', style: s.badgeAmber };
-  return null;
+// Reads the server-computed license_status (never re-derives dates on the client).
+function licenceBadge(status) {
+  switch (status) {
+    case 'expired':       return { label: 'Expired',       style: s.badgeRed };
+    case 'expiring_soon': return { label: 'Expiring soon', style: s.badgeAmber };
+    case 'valid':         return { label: 'Valid',         style: s.badgeGreen };
+    default:              return { label: 'Not set',       style: s.badgeGray };
+  }
 }
+
+// Sort order so expired / expiring licences surface at the top of the register.
+const LICENCE_SEVERITY = { expired: 0, expiring_soon: 1, valid: 2, none: 3 };
 
 export default function CollectorsPage() {
   const [collectors, setCollectors] = useState([]);
@@ -156,8 +161,12 @@ export default function CollectorsPage() {
               </tr>
             </thead>
             <tbody>
-              {collectors.map(c => {
-                const badge = expiryBadge(c.license_expiry);
+              {[...collectors]
+                .sort((a, b) =>
+                  (LICENCE_SEVERITY[a.license_status] ?? 3) - (LICENCE_SEVERITY[b.license_status] ?? 3)
+                  || a.id - b.id)
+                .map(c => {
+                const badge = licenceBadge(c.license_status);
                 return (
                 <tr key={c.id} style={s.tr}>
                   <td style={s.td}>{c.user_name}</td>
@@ -165,8 +174,8 @@ export default function CollectorsPage() {
                   <td style={s.td}>{c.company_name}</td>
                   <td style={s.td}>{c.license_no}</td>
                   <td style={s.td}>
-                    {c.license_expiry ? new Date(c.license_expiry).toLocaleDateString() : '—'}
-                    {badge && <span style={{ ...s.badge, ...badge.style, marginLeft: '0.5rem' }}>{badge.label}</span>}
+                    {c.license_expiry ? new Date(c.license_expiry).toLocaleDateString() : 'Not set'}
+                    <span style={{ ...s.badge, ...badge.style, marginLeft: '0.5rem' }}>{badge.label}</span>
                   </td>
                   <td style={s.td}>{c.contact_phone || '—'}</td>
                   <td style={s.td}>
