@@ -5,6 +5,7 @@ import ErrorBoundary    from './components/ErrorBoundary.jsx';
 import ProtectedRoute  from './components/ProtectedRoute.jsx';
 import Layout          from './components/Layout.jsx';
 
+import LandingPage     from './pages/LandingPage.jsx';
 import StatusPage      from './pages/StatusPage.jsx';
 import LoginPage       from './pages/LoginPage.jsx';
 import RegisterPage    from './pages/RegisterPage.jsx';
@@ -25,7 +26,8 @@ function AppRoutes() {
   return (
     <Routes>
       {/* Public */}
-      <Route path="/"         element={<StatusPage />} />
+      <Route path="/"         element={<LandingPage />} />
+      <Route path="/health"   element={<StatusPage />} />
       <Route path="/login"    element={<LoginPage />} />
       <Route path="/register" element={<RegisterPage />} />
 

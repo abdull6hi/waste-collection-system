@@ -1,0 +1,475 @@
+/* LandingPage — public marketing page. Uses tokens from styles/tokens.css */
+
+.lp-page {
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  font-family: var(--font-family);
+  color: var(--color-gray-800);
+  background: #fff;
+}
+
+/* ── Header ─────────────────────────────────────────── */
+.lp-header {
+  position: sticky;
+  top: 0;
+  z-index: 50;
+  background: rgb(255 255 255 / 0.92);
+  backdrop-filter: blur(8px);
+  border-bottom: 1px solid var(--color-gray-200);
+}
+
+.lp-header-inner {
+  max-width: 1100px;
+  margin: 0 auto;
+  padding: var(--space-3) var(--space-6);
+  display: flex;
+  align-items: center;
+  gap: var(--space-6);
+}
+
+.lp-logo {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  font-weight: 700;
+  font-size: var(--font-size-lg);
+  color: var(--color-primary-700);
+  text-decoration: none;
+}
+
+.lp-logo:hover {
+  color: var(--color-primary-800);
+  text-decoration: none;
+}
+
+.lp-logo-icon {
+  font-size: var(--font-size-2xl);
+  line-height: 1;
+}
+
+.lp-nav {
+  display: flex;
+  align-items: center;
+  gap: var(--space-6);
+  margin-left: auto;
+}
+
+.lp-nav-link {
+  font-size: var(--font-size-sm);
+  font-weight: 500;
+  color: var(--color-gray-600);
+  text-decoration: none;
+  transition: color var(--transition-fast);
+}
+
+.lp-nav-link:hover {
+  color: var(--color-primary-700);
+  text-decoration: none;
+}
+
+.lp-header-actions {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+}
+
+/* ── Buttons ────────────────────────────────────────── */
+.lp-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-2);
+  padding: var(--space-3) var(--space-6);
+  border-radius: var(--radius-md);
+  font-size: var(--font-size-sm);
+  font-weight: 600;
+  text-decoration: none;
+  white-space: nowrap;
+  border: 1.5px solid transparent;
+  cursor: pointer;
+  transition: background var(--transition-fast), color var(--transition-fast),
+    border-color var(--transition-fast), transform var(--transition-fast),
+    box-shadow var(--transition-fast);
+}
+
+.lp-btn:hover {
+  text-decoration: none;
+  transform: translateY(-1px);
+}
+
+.lp-btn-primary {
+  background: var(--color-primary-600);
+  color: #fff;
+  box-shadow: var(--shadow-sm);
+}
+
+.lp-btn-primary:hover {
+  background: var(--color-primary-700);
+  color: #fff;
+  box-shadow: var(--shadow-md);
+}
+
+.lp-btn-ghost {
+  background: transparent;
+  color: var(--color-gray-700);
+  border-color: var(--color-gray-300);
+}
+
+.lp-btn-ghost:hover {
+  color: var(--color-primary-700);
+  border-color: var(--color-primary-400);
+  background: var(--color-primary-50);
+}
+
+.lp-btn-sm {
+  padding: var(--space-2) var(--space-4);
+}
+
+.lp-btn-lg {
+  padding: var(--space-4) var(--space-8);
+  font-size: var(--font-size-base);
+  border-radius: var(--radius-lg);
+}
+
+.lp-btn-inverse {
+  background: #fff;
+  color: var(--color-primary-800);
+}
+
+.lp-btn-inverse:hover {
+  background: var(--color-primary-50);
+  color: var(--color-primary-900);
+  box-shadow: var(--shadow-lg);
+}
+
+/* ── Shared section layout ──────────────────────────── */
+.lp-section {
+  max-width: 1100px;
+  margin: 0 auto;
+  padding: var(--space-16) var(--space-6);
+  width: 100%;
+  scroll-margin-top: 5rem;
+}
+
+.lp-section-title {
+  font-size: var(--font-size-3xl);
+  font-weight: 700;
+  text-align: center;
+  color: var(--color-gray-900);
+  margin-bottom: var(--space-3);
+}
+
+.lp-section-sub {
+  text-align: center;
+  color: var(--color-gray-500);
+  max-width: 34rem;
+  margin: 0 auto var(--space-12);
+}
+
+/* ── Hero ───────────────────────────────────────────── */
+.lp-hero {
+  background: linear-gradient(
+    160deg,
+    var(--color-primary-50) 0%,
+    #fff 55%,
+    var(--color-primary-50) 100%
+  );
+}
+
+.lp-hero-inner {
+  max-width: 1100px;
+  margin: 0 auto;
+  padding: var(--space-16) var(--space-6) var(--space-20);
+  display: grid;
+  grid-template-columns: 1.1fr 1fr;
+  gap: var(--space-12);
+  align-items: center;
+}
+
+.lp-hero-eyebrow {
+  display: inline-block;
+  background: var(--color-primary-100);
+  color: var(--color-primary-800);
+  font-size: var(--font-size-xs);
+  font-weight: 600;
+  padding: var(--space-1) var(--space-3);
+  border-radius: var(--radius-full);
+  margin-bottom: var(--space-4);
+}
+
+.lp-hero-title {
+  font-size: clamp(2rem, 4.5vw, 3.25rem);
+  font-weight: 700;
+  line-height: 1.15;
+  color: var(--color-gray-900);
+  margin-bottom: var(--space-4);
+}
+
+.lp-hero-title em {
+  font-style: normal;
+  color: var(--color-primary-600);
+}
+
+.lp-hero-sub {
+  font-size: var(--font-size-lg);
+  color: var(--color-gray-600);
+  max-width: 30rem;
+  margin-bottom: var(--space-8);
+}
+
+.lp-hero-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-3);
+}
+
+.lp-hero-art {
+  width: 100%;
+  height: auto;
+}
+
+/* ── Role cards ─────────────────────────────────────── */
+.lp-cards {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: var(--space-6);
+}
+
+.lp-card {
+  background: #fff;
+  border: 1px solid var(--color-gray-200);
+  border-radius: var(--radius-xl);
+  padding: var(--space-8) var(--space-6);
+  text-align: center;
+  transition: transform var(--transition-normal), box-shadow var(--transition-normal),
+    border-color var(--transition-normal);
+}
+
+.lp-card:hover {
+  transform: translateY(-4px);
+  box-shadow: var(--shadow-lg);
+  border-color: var(--color-primary-200);
+}
+
+.lp-card-icon {
+  width: 3.5rem;
+  height: 3.5rem;
+  margin: 0 auto var(--space-4);
+  border-radius: var(--radius-full);
+  background: var(--color-primary-100);
+  color: var(--color-primary-700);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.lp-card-title {
+  font-size: var(--font-size-lg);
+  font-weight: 600;
+  color: var(--color-gray-900);
+  margin-bottom: var(--space-2);
+}
+
+.lp-card-text {
+  font-size: var(--font-size-sm);
+  color: var(--color-gray-500);
+}
+
+/* ── How it works ───────────────────────────────────── */
+.lp-how {
+  background: var(--color-gray-50);
+}
+
+.lp-steps {
+  list-style: none;
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: var(--space-6);
+  counter-reset: lp-step;
+}
+
+.lp-step {
+  background: #fff;
+  border: 1px solid var(--color-gray-200);
+  border-radius: var(--radius-lg);
+  padding: var(--space-6);
+  position: relative;
+  transition: transform var(--transition-normal), box-shadow var(--transition-normal);
+}
+
+.lp-step:hover {
+  transform: translateY(-3px);
+  box-shadow: var(--shadow-md);
+}
+
+.lp-step-num {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 2rem;
+  height: 2rem;
+  border-radius: var(--radius-full);
+  background: var(--color-primary-600);
+  color: #fff;
+  font-size: var(--font-size-sm);
+  font-weight: 700;
+  margin-bottom: var(--space-4);
+}
+
+.lp-step-title {
+  font-size: var(--font-size-base);
+  font-weight: 600;
+  color: var(--color-gray-900);
+  margin-bottom: var(--space-2);
+}
+
+.lp-step-text {
+  font-size: var(--font-size-sm);
+  color: var(--color-gray-500);
+}
+
+/* ── Why it matters ─────────────────────────────────── */
+.lp-about {
+  background: var(--color-primary-50);
+}
+
+.lp-about-inner {
+  max-width: 46rem;
+  margin: 0 auto;
+  text-align: center;
+}
+
+.lp-about-text {
+  color: var(--color-gray-600);
+  font-size: var(--font-size-lg);
+}
+
+.lp-about-text + .lp-about-text {
+  margin-top: var(--space-4);
+}
+
+/* ── Final CTA band ─────────────────────────────────── */
+.lp-cta {
+  background: linear-gradient(
+    135deg,
+    var(--color-primary-700) 0%,
+    var(--color-primary-900) 100%
+  );
+}
+
+.lp-cta-inner {
+  max-width: 1100px;
+  margin: 0 auto;
+  padding: var(--space-16) var(--space-6);
+  text-align: center;
+}
+
+.lp-cta-title {
+  font-size: var(--font-size-3xl);
+  font-weight: 700;
+  color: #fff;
+  margin-bottom: var(--space-3);
+}
+
+.lp-cta-sub {
+  color: var(--color-primary-100);
+  margin-bottom: var(--space-8);
+}
+
+/* ── Footer ─────────────────────────────────────────── */
+.lp-footer {
+  border-top: 1px solid var(--color-gray-200);
+  background: #fff;
+  padding: var(--space-8) var(--space-6);
+  text-align: center;
+}
+
+.lp-footer-brand {
+  font-weight: 700;
+  color: var(--color-primary-700);
+  margin-bottom: var(--space-2);
+}
+
+.lp-footer-line {
+  font-size: var(--font-size-sm);
+  color: var(--color-gray-500);
+  margin-bottom: var(--space-1);
+}
+
+.lp-footer-fine {
+  font-size: var(--font-size-xs);
+  color: var(--color-gray-400);
+}
+
+/* ── Responsive ─────────────────────────────────────── */
+@media (max-width: 900px) {
+  .lp-hero-inner {
+    grid-template-columns: 1fr;
+    padding-top: var(--space-12);
+    padding-bottom: var(--space-12);
+    gap: var(--space-10);
+  }
+
+  .lp-hero-art-wrap {
+    max-width: 26rem;
+    margin: 0 auto;
+  }
+
+  .lp-cards {
+    grid-template-columns: 1fr;
+  }
+
+  .lp-steps {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+@media (max-width: 640px) {
+  .lp-nav-link {
+    display: none;
+  }
+
+  .lp-header-inner {
+    gap: var(--space-3);
+    padding-left: var(--space-4);
+    padding-right: var(--space-4);
+  }
+
+  .lp-logo {
+    font-size: var(--font-size-base);
+    white-space: nowrap;
+  }
+
+  .lp-logo-icon {
+    font-size: var(--font-size-xl);
+  }
+
+  .lp-header-actions {
+    gap: var(--space-2);
+  }
+
+  .lp-header-actions .lp-btn-sm {
+    padding: var(--space-2) var(--space-3);
+    font-size: var(--font-size-xs);
+  }
+}
+
+@media (max-width: 400px) {
+  .lp-logo-city {
+    display: none;
+  }
+
+  .lp-section {
+    padding-top: var(--space-12);
+    padding-bottom: var(--space-12);
+  }
+
+  .lp-steps {
+    grid-template-columns: 1fr;
+  }
+
+  .lp-hero-actions .lp-btn {
+    flex: 1 1 100%;
+  }
+}
