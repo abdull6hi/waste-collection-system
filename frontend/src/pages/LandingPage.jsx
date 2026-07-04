@@ -68,7 +68,7 @@ export default function LandingPage() {
           <div className="lp-cards">
             <div className="lp-card">
               <div className="lp-card-icon"><LandmarkIcon /></div>
-              <h3 className="lp-card-title">County officials</h3>
+              <h3 className="lp-card-title">Administrators</h3>
               <p className="lp-card-text">
                 See every zone at a glance and make sure no neighbourhood gets left behind.
               </p>
@@ -102,7 +102,7 @@ export default function LandingPage() {
                 <span className="lp-step-num" aria-hidden="true">1</span>
                 <h3 className="lp-step-title">Schedules are set</h3>
                 <p className="lp-step-text">
-                  County officials give every zone a pickup day and a crew to match.
+                  Administrators give every zone a pickup day and a crew to match.
                 </p>
               </li>
               <li className="lp-step">

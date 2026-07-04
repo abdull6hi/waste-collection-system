@@ -6,6 +6,7 @@ import Modal from './Modal.jsx';
 import { updateMyProfile, changeMyPassword } from '../api/users.js';
 import { getMyProfile as fetchCollectorProfile } from '../api/collectors.js';
 import { extractError } from '../api/client.js';
+import { roleLabel } from '../utils/roleLabel.js';
 
 function getInitials(name) {
   if (!name) return '?';
@@ -85,7 +86,7 @@ function EditProfileModal({ onClose }) {
 
           <div style={s.readonlyField}>
             <span style={s.readonlyLabel}>Role</span>
-            <span style={s.roleBadge}>{user?.role}</span>
+            <span style={s.roleBadge}>{roleLabel(user?.role)}</span>
           </div>
 
           <label style={s.label}>
@@ -246,7 +247,7 @@ export default function ProfileMenu({ dropUp = false }) {
           <div style={s.dropHeader}>
             <p style={s.dropName}>{user?.name}</p>
             <p style={s.dropEmail}>{user?.email}</p>
-            <span style={s.roleBadge}>{user?.role}</span>
+            <span style={s.roleBadge}>{roleLabel(user?.role)}</span>
           </div>
           <div style={s.dropDivider} />
           <button

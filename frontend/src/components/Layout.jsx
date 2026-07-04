@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { NavLink } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext.jsx';
 import ProfileMenu from './ProfileMenu.jsx';
+import { roleLabel } from '../utils/roleLabel.js';
 
 const NAV = {
   official: [
@@ -95,7 +96,7 @@ export default function Layout({ children }) {
 
           <div style={s.userBlock}>
             <p style={s.userName}>{user?.name}</p>
-            <p style={s.userRole}>{user?.role}</p>
+            <p style={s.userRole}>{roleLabel(user?.role)}</p>
           </div>
         </aside>
 
