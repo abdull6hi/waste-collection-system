@@ -5,7 +5,6 @@ import { useAuth } from '../context/AuthContext.jsx';
 import client, { extractError } from '../api/client.js';
 import * as ScheduleAPI   from '../api/schedules.js';
 import * as ComplaintAPI  from '../api/complaints.js';
-import { setMyZone }      from '../api/users.js';
 import Modal              from '../components/Modal.jsx';
 
 const DAYS = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
@@ -238,12 +237,11 @@ function CollectorDashboard({ user }) {
 
 /* ─── Resident dashboard ─────────────────────────────────────── */
 function ResidentDashboard({ user }) {
-  const { updateUser } = useAuth();
+  // Zone is captured at registration and edited only via Profile — read-only here.
+  // Derived from the auth user so a profile change reflects immediately.
+  const zoneId = user?.zone_id ?? null;
   const [zones,       setZones]       = useState([]);
   const [schedules,   setSchedules]   = useState([]);
-  const [zoneId,      setZoneId]      = useState(user?.zone_id ?? null);
-  const [saving,      setSaving]      = useState(false);
-  const [err,         setErr]         = useState('');
   const [complaints,  setComplaints]  = useState([]);
   const [showReport,  setShowReport]  = useState(false);
   const [reportRef,   setReportRef]   = useState('');
@@ -271,17 +269,6 @@ function ResidentDashboard({ user }) {
   }
 
   useEffect(() => { loadComplaints(); }, []);
-
-  async function handleZoneSelect(e) {
-    const id = Number(e.target.value);
-    setSaving(true); setErr('');
-    try {
-      await setMyZone(id);
-      setZoneId(id);
-      updateUser({ ...user, zone_id: id });
-    } catch { setErr('Could not save zone.'); }
-    finally { setSaving(false); }
-  }
 
   function openReport() {
     setForm({ zone_id: zoneId ? String(zoneId) : '', category: '', description: '' });
@@ -312,17 +299,16 @@ function ResidentDashboard({ user }) {
       </div>
 
       <div style={s.card2}>
-        <label style={{ ...s.label, marginBottom: '0.75rem' }}>
-          Your collection zone
-          <select value={zoneId ?? ''} onChange={handleZoneSelect} disabled={saving} style={s.select}>
-            <option value="">Select your zone…</option>
-            {zones.map(z => <option key={z.id} value={z.id}>{z.name}</option>)}
-          </select>
-        </label>
-        {err && <p style={{ color: '#dc2626', fontSize: '0.85rem' }}>{err}</p>}
+        <p style={{ ...s.label, marginBottom: '0.35rem' }}>Your collection zone</p>
+        {zoneId ? (
+          <p style={s.zoneReadonly}>{zones.find(z => z.id === zoneId)?.name ?? `Zone #${zoneId}`}</p>
+        ) : (
+          <p style={s.muted}>No zone set yet — add one in Profile.</p>
+        )}
+        <p style={s.zoneHint}>Change your zone in Profile.</p>
 
         {zoneId && schedules.length === 0 && (
-          <p style={s.muted}>No schedules published for this zone yet.</p>
+          <p style={{ ...s.muted, marginTop: '0.75rem' }}>No schedules published for this zone yet.</p>
         )}
 
         {schedules.length > 0 && (
@@ -471,6 +457,8 @@ const s = {
   label:      { display: 'flex', flexDirection: 'column', gap: '0.35rem', fontSize: '0.875rem', fontWeight: 500, color: '#374151' },
   select:     { padding: '0.6rem 0.85rem', border: '1.5px solid #d1d5db', borderRadius: '0.55rem', fontSize: '0.9rem', fontFamily: 'inherit', background: '#fff' },
   muted:      { color: '#9ca3af', fontSize: '0.875rem', marginTop: '0.5rem' },
+  zoneReadonly: { fontSize: '1.05rem', fontWeight: 600, color: '#15803d' },
+  zoneHint:   { color: '#9ca3af', fontSize: '0.8rem', marginTop: '0.2rem' },
   schedsHeader: { fontWeight: 600, fontSize: '0.8rem', color: '#6b7280', textTransform: 'uppercase', letterSpacing: '0.04em', marginBottom: '0.5rem' },
   schedRow:   { display: 'flex', alignItems: 'center', gap: '0.75rem', padding: '0.6rem 0', borderBottom: '1px solid #f3f4f6' },
   schedDay:   { fontWeight: 600, color: '#111827', fontSize: '0.875rem', minWidth: '80px' },

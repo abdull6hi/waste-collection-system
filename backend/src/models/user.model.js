@@ -19,18 +19,18 @@ export async function findByEmail(email) {
 
 export async function findById(id) {
   const { rows } = await query(
-    'SELECT id, name, email, role, zone_id, created_at FROM users WHERE id = $1 LIMIT 1',
+    'SELECT id, name, email, role, zone_id, contact_phone, created_at FROM users WHERE id = $1 LIMIT 1',
     [id]
   );
   return rows[0] ?? null;
 }
 
-export async function create({ name, email, password_hash, role }) {
+export async function create({ name, email, password_hash, role, zone_id, contact_phone }) {
   const { rows } = await query(
-    `INSERT INTO users (name, email, password_hash, role)
-     VALUES ($1, $2, $3, $4)
-     RETURNING id, name, email, role, zone_id, created_at`,
-    [name, email, password_hash, role]
+    `INSERT INTO users (name, email, password_hash, role, zone_id, contact_phone)
+     VALUES ($1, $2, $3, $4, $5, $6)
+     RETURNING id, name, email, role, zone_id, contact_phone, created_at`,
+    [name, email, password_hash, role, zone_id ?? null, contact_phone ?? null]
   );
   return rows[0];
 }
@@ -38,17 +38,27 @@ export async function create({ name, email, password_hash, role }) {
 export async function setZone(userId, zoneId) {
   const { rows } = await query(
     `UPDATE users SET zone_id = $1 WHERE id = $2
-     RETURNING id, name, email, role, zone_id, created_at`,
+     RETURNING id, name, email, role, zone_id, contact_phone, created_at`,
     [zoneId, userId]
   );
   return rows[0] ?? null;
 }
 
-export async function updateProfile(id, { name, email }) {
+/**
+ * Updates the user's own profile. name/email are always set; contact_phone and
+ * zone_id are applied only when provided (COALESCE keeps the existing value when
+ * the argument is null/undefined), so callers that omit them don't clobber them.
+ */
+export async function updateProfile(id, { name, email, contact_phone, zone_id }) {
   const { rows } = await query(
-    `UPDATE users SET name = $1, email = $2 WHERE id = $3
-     RETURNING id, name, email, role, zone_id, created_at`,
-    [name, email, id]
+    `UPDATE users
+     SET name          = $1,
+         email         = $2,
+         contact_phone = COALESCE($3, contact_phone),
+         zone_id       = COALESCE($4, zone_id)
+     WHERE id = $5
+     RETURNING id, name, email, role, zone_id, contact_phone, created_at`,
+    [name, email, contact_phone ?? null, zone_id ?? null, id]
   );
   return rows[0] ?? null;
 }

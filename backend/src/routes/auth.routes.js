@@ -20,6 +20,9 @@ const registerRules = [
     .isLength({ max: 100 }).withMessage('name must be 100 characters or fewer'),
   body('email').isEmail().withMessage('A valid email address is required').normalizeEmail(),
   body('password').isLength({ min: 8 }).withMessage('Password must be at least 8 characters'),
+  body('zone_id').isInt({ min: 1 }).withMessage('Please select your collection zone'),
+  body('contact_phone').trim().notEmpty().withMessage('Contact phone is required')
+    .isLength({ max: 20 }).withMessage('contact_phone must be 20 characters or fewer'),
   // 'role' is intentionally NOT accepted here — public registration always creates 'resident'
 ];
 

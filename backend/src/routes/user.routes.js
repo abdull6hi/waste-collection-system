@@ -16,6 +16,8 @@ const profileRules = [
   body('email').isEmail().withMessage('A valid email address is required').normalizeEmail(),
   body('contact_phone').optional({ nullable: true, checkFalsy: false }).trim()
     .isLength({ max: 20 }).withMessage('contact_phone must be 20 characters or fewer'),
+  body('zone_id').optional({ nullable: true, checkFalsy: true })
+    .isInt({ min: 1 }).withMessage('zone_id must be a positive integer'),
 ];
 
 const passwordRules = [

@@ -2,9 +2,14 @@ import { Router } from 'express';
 import { body } from 'express-validator';
 import { authenticate, requireRole } from '../middleware/auth.middleware.js';
 import { validate } from '../middleware/validate.middleware.js';
-import { list, getOne, create, update, remove, assignCollector } from '../controllers/zone.controller.js';
+import { list, getOne, create, update, remove, assignCollector, listPublic } from '../controllers/zone.controller.js';
 
 const router = Router();
+
+// Public, unauthenticated — id + name only, for the registration dropdown.
+// Registered BEFORE the authenticate gate below so it stays open.
+router.get('/public', listPublic);
+
 router.use(authenticate);
 
 const zoneRules = [

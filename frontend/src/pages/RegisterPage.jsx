@@ -1,6 +1,7 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import client, { extractError } from '../api/client.js';
+import { getPublicZones } from '../api/zones.js';
 import { useAuth } from '../context/AuthContext.jsx';
 
 export default function RegisterPage() {
@@ -10,9 +11,18 @@ export default function RegisterPage() {
   // Role is always 'resident' for public registration.
   // Officials are provisioned by existing officials via the admin panel.
   // Collectors are created by officials via the Collectors management page.
-  const [form, setForm]     = useState({ name: '', email: '', password: '' });
+  const [form, setForm]     = useState({ name: '', email: '', password: '', zone_id: '', contact_phone: '' });
+  const [zones, setZones]   = useState([]);
+  const [zonesLoading, setZonesLoading] = useState(true);
   const [error, setError]   = useState('');
   const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    getPublicZones()
+      .then(res => setZones(res.data.zones))
+      .catch(() => setZones([]))
+      .finally(() => setZonesLoading(false));
+  }, []);
 
   function handleChange(e) {
     setForm(f => ({ ...f, [e.target.name]: e.target.value }));
@@ -24,9 +34,21 @@ export default function RegisterPage() {
     if (form.password.length < 8) {
       return setError('Password must be at least 8 characters');
     }
+    if (!form.zone_id) {
+      return setError('Please select your collection zone');
+    }
+    if (!form.contact_phone.trim()) {
+      return setError('Please enter a contact phone');
+    }
     setLoading(true);
     try {
-      const res = await client.post('/api/auth/register', form);
+      const res = await client.post('/api/auth/register', {
+        name: form.name,
+        email: form.email,
+        password: form.password,
+        zone_id: Number(form.zone_id),
+        contact_phone: form.contact_phone.trim(),
+      });
       login(res.data.token, res.data.user);
       navigate('/dashboard');
     } catch (err) {
@@ -71,6 +93,32 @@ export default function RegisterPage() {
               type="password" name="password" required autoComplete="new-password"
               value={form.password} onChange={handleChange}
               style={styles.input} placeholder="Min. 8 characters"
+            />
+          </label>
+
+          <label style={styles.label} htmlFor="reg-zone">Collection zone
+            <select
+              id="reg-zone"
+              name="zone_id" required
+              value={form.zone_id} onChange={handleChange}
+              style={styles.input}
+              disabled={zonesLoading}
+            >
+              <option value="" disabled>
+                {zonesLoading ? 'Loading zones…' : zones.length ? 'Select your zone…' : 'No zones available'}
+              </option>
+              {zones.map(z => (
+                <option key={z.id} value={z.id}>{z.name}</option>
+              ))}
+            </select>
+          </label>
+
+          <label style={styles.label} htmlFor="reg-phone">Contact phone
+            <input
+              id="reg-phone"
+              type="tel" name="contact_phone" required autoComplete="tel"
+              value={form.contact_phone} onChange={handleChange}
+              style={styles.input} placeholder="+254 700 000 000" maxLength={20}
             />
           </label>
 

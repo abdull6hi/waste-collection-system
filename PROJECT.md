@@ -33,7 +33,7 @@ Three distinct user roles share one interface:
 ## Seven Core Entities
 
 ```
-User          — id, name, email, password_hash, role (official|collector|resident), created_at
+User          — id, name, email, password_hash, role (official|collector|resident), zone_id (FK), contact_phone, created_at
 Collector     — id, user_id (FK), company_name, license_no, license_expiry, contact_phone, active
 Zone          — id, name, description, boundary_geojson, assigned_collector_id (FK)
 Schedule      — id, zone_id (FK), collector_id (FK), day_of_week, start_time, frequency
@@ -71,6 +71,7 @@ backend/src/config/db.js    →  Database connection pool
 | **8 — Hardening** | Input validation, rate limiting, security headers, error handling audit | ✅ Complete |
 | **Add-on — Profile & Self-Service Edit** | Profile avatar/dropdown in shared header; PATCH /api/users/me (name/email); PATCH /api/users/me/password (bcrypt verify → update); collector contact_phone self-edit; GET /api/collectors/me; live avatar/greeting update via AuthContext.updateUser | ✅ Complete |
 | **Add-on — Collector "My Residents" view** | Read-only view letting a collector see residents in their assigned zones, derived through `zones.assigned_collector_id` (no direct collector↔resident link). `GET /api/collectors/me/residents` (collector-only, ownership resolved from JWT — never a request param); returns name + zone only (no email/role/PII); `MyResidentsPage` grouped by zone with loading/empty/error states | ✅ Complete |
+| **Add-on — Resident zone & contact at registration** | Residents choose their collection zone and enter a contact phone during registration; the dashboard shows the zone **read-only** (editable only from the Profile modal). New nullable `users.contact_phone` column (migration 011); public `GET /api/zones/public` (unauthenticated, id + name only) feeds the registration dropdown; `POST /api/auth/register` accepts+validates `zone_id`/`contact_phone` (role still hardcoded `'resident'`); `PATCH /api/users/me` persists resident zone_id + contact_phone on the users row; `PATCH /api/users/me/zone` left intact | ✅ Complete |
 | **Code Review — Security & Quality** | External code review fixes + improvements (see below) | ✅ Complete |
 
 ### Code Review Fixes Applied

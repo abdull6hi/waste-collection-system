@@ -2,6 +2,7 @@
 import bcrypt from 'bcrypt';
 import jwt from 'jsonwebtoken';
 import * as UserModel from '../models/user.model.js';
+import * as ZoneModel from '../models/zone.model.js';
 
 const SALT_ROUNDS = 12;
 
@@ -14,13 +15,23 @@ function signToken(user) {
 }
 
 export async function register(req, res) {
-  const { name, email, password } = req.body;
+  const { name, email, password, zone_id, contact_phone } = req.body;
+
+  // zone_id shape is validated by registerRules; confirm it references a real zone
+  // so we return a clean 400 rather than a raw foreign-key violation.
+  const zone = await ZoneModel.findById(Number(zone_id));
+  if (!zone) return res.status(400).json({ error: { message: 'Selected zone does not exist' } });
+
   const password_hash = await bcrypt.hash(password, SALT_ROUNDS);
   // Role is always 'resident' for public registration — privilege escalation prevented here.
   // Officials are created by existing officials via POST /api/users/officials.
   // Collectors are created by officials via POST /api/collectors.
   // Duplicate email is caught by the DB unique constraint → 409 via error handler
-  const user = await UserModel.create({ name, email, password_hash, role: 'resident' });
+  const user = await UserModel.create({
+    name, email, password_hash, role: 'resident',
+    zone_id: Number(zone_id),
+    contact_phone,
+  });
   const token = signToken(user);
   res.status(201).json({ token, user });
 }

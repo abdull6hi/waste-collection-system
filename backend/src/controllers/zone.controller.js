@@ -7,6 +7,12 @@ export async function list(req, res) {
   res.json({ zones });
 }
 
+/** Unauthenticated: id + name only, for the public registration dropdown. */
+export async function listPublic(req, res) {
+  const zones = await ZoneModel.findAllPublic();
+  res.json({ zones });
+}
+
 export async function getOne(req, res) {
   const zone = await ZoneModel.findById(Number(req.params.id));
   if (!zone) return res.status(404).json({ error: { message: 'Zone not found' } });

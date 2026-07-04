@@ -2,6 +2,7 @@
 import bcrypt from 'bcrypt';
 import * as UserModel from '../models/user.model.js';
 import * as CollectorModel from '../models/collector.model.js';
+import * as ZoneModel from '../models/zone.model.js';
 
 export async function setMyZone(req, res) {
   const { zone_id } = req.body;
@@ -11,8 +12,25 @@ export async function setMyZone(req, res) {
 }
 
 export async function updateMyProfile(req, res) {
-  const { name, email, contact_phone } = req.body;
-  const user = await UserModel.updateProfile(req.user.id, { name, email });
+  const { name, email, contact_phone, zone_id } = req.body;
+
+  const zoneProvided = zone_id !== undefined && zone_id !== null && zone_id !== '';
+  if (zoneProvided) {
+    // Clean 400 instead of a raw FK error if the zone doesn't exist.
+    const zone = await ZoneModel.findById(Number(zone_id));
+    if (!zone) return res.status(400).json({ error: { message: 'Selected zone does not exist' } });
+  }
+
+  // Residents persist contact_phone + zone_id on their own users row. Collectors
+  // keep contact_phone on the collectors table (handled below), so we don't write
+  // those columns for them.
+  const updates = { name, email };
+  if (req.user.role === 'resident') {
+    if (contact_phone !== undefined) updates.contact_phone = contact_phone ?? null;
+    if (zoneProvided) updates.zone_id = Number(zone_id);
+  }
+
+  const user = await UserModel.updateProfile(req.user.id, updates);
   if (!user) return res.status(404).json({ error: { message: 'User not found' } });
 
   const result = { ...UserModel.sanitizeUser(user) };

@@ -5,6 +5,7 @@ import { useAuth } from '../context/AuthContext.jsx';
 import Modal from './Modal.jsx';
 import { updateMyProfile, changeMyPassword } from '../api/users.js';
 import { getMyProfile as fetchCollectorProfile } from '../api/collectors.js';
+import { getZones } from '../api/zones.js';
 import { extractError } from '../api/client.js';
 import { roleLabel } from '../utils/roleLabel.js';
 
@@ -19,8 +20,10 @@ function EditProfileModal({ onClose }) {
 
   const [name,         setName]         = useState(user?.name ?? '');
   const [email,        setEmail]        = useState(user?.email ?? '');
-  const [contactPhone, setContactPhone] = useState('');
+  const [contactPhone, setContactPhone] = useState(user?.role === 'resident' ? (user?.contact_phone ?? '') : '');
   const [collectorInfo,setCollectorInfo]= useState(null);
+  const [zones,        setZones]        = useState([]);
+  const [zoneId,       setZoneId]       = useState(user?.zone_id ?? '');
   const [profileErr,   setProfileErr]   = useState('');
   const [savingProfile,setSavingProfile]= useState(false);
 
@@ -38,6 +41,10 @@ function EditProfileModal({ onClose }) {
           setContactPhone(r.data.collector.contact_phone ?? '');
         })
         .catch(() => {});
+    } else if (user?.role === 'resident') {
+      getZones()
+        .then(r => setZones(r.data.zones))
+        .catch(() => setZones([]));
     }
   }, [user?.role]);
 
@@ -48,6 +55,10 @@ function EditProfileModal({ onClose }) {
     try {
       const payload = { name: name.trim(), email: email.trim() };
       if (user?.role === 'collector') payload.contact_phone = contactPhone.trim();
+      if (user?.role === 'resident') {
+        payload.contact_phone = contactPhone.trim();
+        if (zoneId) payload.zone_id = Number(zoneId);
+      }
       const res = await updateMyProfile(payload);
       const updated = res.data.user;
       updateUser({ ...user, ...updated });
@@ -137,14 +148,31 @@ function EditProfileModal({ onClose }) {
 
           {/* Resident-specific fields */}
           {user?.role === 'resident' && (
-            <div style={s.readonlyGroup}>
-              <div style={s.readonlyField}>
-                <span style={s.readonlyLabel}>Zone</span>
-                <span style={s.readonlyValue}>
-                  {user?.zone_id ? `Zone #${user.zone_id} — editable from dashboard` : 'Not set — editable from dashboard'}
-                </span>
-              </div>
-            </div>
+            <>
+              <label style={s.label}>
+                Collection zone
+                <select
+                  value={zoneId}
+                  onChange={e => setZoneId(e.target.value)}
+                  style={s.input}
+                >
+                  <option value="" disabled>Select your zone…</option>
+                  {zones.map(z => (
+                    <option key={z.id} value={z.id}>{z.name}</option>
+                  ))}
+                </select>
+              </label>
+
+              <label style={s.label}>
+                Contact Phone
+                <input
+                  type="tel" value={contactPhone} maxLength={20}
+                  onChange={e => setContactPhone(e.target.value)}
+                  placeholder="+254 700 000 000"
+                  style={s.input}
+                />
+              </label>
+            </>
           )}
 
           {profileErr && <p style={s.err}>{profileErr}</p>}

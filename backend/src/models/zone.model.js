@@ -11,6 +11,18 @@ export async function findAll() {
   return rows;
 }
 
+/**
+ * Minimal public projection — id and name only. Safe to expose unauthenticated
+ * on the registration page; leaks no collector assignment, boundary, or PII.
+ */
+export async function findAllPublic() {
+  const { rows } = await query(
+    'SELECT id, name FROM zones ORDER BY name',
+    []
+  );
+  return rows;
+}
+
 export async function findById(id) {
   const { rows } = await query(
     `SELECT z.*, c.company_name AS collector_name
