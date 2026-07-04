@@ -7,12 +7,17 @@ import { validate } from '../middleware/validate.middleware.js';
 
 const router = Router();
 
+// Disabled only when explicitly opted out (the integration suite sets this) —
+// enabled by default so production always rate-limits auth endpoints.
+const RATE_LIMIT_DISABLED = process.env.RATE_LIMIT_DISABLED === 'true';
+
 const authLimiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutes
   max: 10,
   standardHeaders: true,
   legacyHeaders: false,
   message: { error: { message: 'Too many attempts. Please try again in 15 minutes.' } },
+  skip: () => RATE_LIMIT_DISABLED,
 });
 
 const registerRules = [
@@ -23,6 +28,8 @@ const registerRules = [
   body('zone_id').isInt({ min: 1 }).withMessage('Please select your collection zone'),
   body('contact_phone').trim().notEmpty().withMessage('Contact phone is required')
     .isLength({ max: 20 }).withMessage('contact_phone must be 20 characters or fewer'),
+  body('collector_id').optional({ nullable: true, checkFalsy: true })
+    .isInt({ min: 1 }).withMessage('collector_id must be a positive integer'),
   // 'role' is intentionally NOT accepted here — public registration always creates 'resident'
 ];
 

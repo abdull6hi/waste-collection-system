@@ -18,6 +18,8 @@ const profileRules = [
     .isLength({ max: 20 }).withMessage('contact_phone must be 20 characters or fewer'),
   body('zone_id').optional({ nullable: true, checkFalsy: true })
     .isInt({ min: 1 }).withMessage('zone_id must be a positive integer'),
+  body('collector_id').optional({ nullable: true, checkFalsy: true })
+    .isInt({ min: 1 }).withMessage('collector_id must be a positive integer'),
 ];
 
 const passwordRules = [

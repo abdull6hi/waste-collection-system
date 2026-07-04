@@ -19,7 +19,7 @@ export async function findByEmail(email) {
 
 export async function findById(id) {
   const { rows } = await query(
-    'SELECT id, name, email, role, zone_id, contact_phone, created_at FROM users WHERE id = $1 LIMIT 1',
+    'SELECT id, name, email, role, zone_id, collector_id, contact_phone, created_at FROM users WHERE id = $1 LIMIT 1',
     [id]
   );
   return rows[0] ?? null;
@@ -34,50 +34,58 @@ export async function findByRole(role) {
   return rows;
 }
 
-export async function create({ name, email, password_hash, role, zone_id, contact_phone }) {
+export async function create({ name, email, password_hash, role, zone_id, contact_phone, collector_id }) {
   const { rows } = await query(
-    `INSERT INTO users (name, email, password_hash, role, zone_id, contact_phone)
-     VALUES ($1, $2, $3, $4, $5, $6)
-     RETURNING id, name, email, role, zone_id, contact_phone, created_at`,
-    [name, email, password_hash, role, zone_id ?? null, contact_phone ?? null]
+    `INSERT INTO users (name, email, password_hash, role, zone_id, contact_phone, collector_id)
+     VALUES ($1, $2, $3, $4, $5, $6, $7)
+     RETURNING id, name, email, role, zone_id, collector_id, contact_phone, created_at`,
+    [name, email, password_hash, role, zone_id ?? null, contact_phone ?? null, collector_id ?? null]
   );
   return rows[0];
 }
 
+/**
+ * Sets a resident's zone. Also clears collector_id — a chosen collector approved
+ * for the OLD zone may not be approved for the new one, so we force a fresh choice
+ * (invariant safety, rule #4). Same-transaction single UPDATE keeps it atomic.
+ */
 export async function setZone(userId, zoneId) {
   const { rows } = await query(
-    `UPDATE users SET zone_id = $1 WHERE id = $2
-     RETURNING id, name, email, role, zone_id, contact_phone, created_at`,
+    `UPDATE users SET zone_id = $1, collector_id = NULL WHERE id = $2
+     RETURNING id, name, email, role, zone_id, collector_id, contact_phone, created_at`,
     [zoneId, userId]
   );
   return rows[0] ?? null;
 }
 
 /**
- * Updates the user's own profile. name/email are always set; contact_phone and
- * zone_id are applied only when provided (COALESCE keeps the existing value when
- * the argument is null/undefined), so callers that omit them don't clobber them.
+ * Updates the user's own profile. Only the columns present as keys in `updates`
+ * are written, so an omitted field is left untouched while an explicit `null`
+ * (e.g. clearing collector_id on a zone change) is honoured. name/email are
+ * always supplied by the controller. Validation of collector_id/zone_id happens
+ * in the controller before this is called.
  */
-export async function updateProfile(id, { name, email, contact_phone, zone_id }) {
+export async function updateProfile(id, updates) {
+  const cols = [];
+  const vals = [];
+  let i = 1;
+  for (const key of ['name', 'email', 'contact_phone', 'zone_id', 'collector_id']) {
+    if (key in updates) { cols.push(`${key} = $${i++}`); vals.push(updates[key]); }
+  }
+  if (cols.length === 0) return findById(id);
+  vals.push(id);
   const { rows } = await query(
-    `UPDATE users
-     SET name          = $1,
-         email         = $2,
-         contact_phone = COALESCE($3, contact_phone),
-         zone_id       = COALESCE($4, zone_id)
-     WHERE id = $5
-     RETURNING id, name, email, role, zone_id, contact_phone, created_at`,
-    [name, email, contact_phone ?? null, zone_id ?? null, id]
+    `UPDATE users SET ${cols.join(', ')} WHERE id = $${i}
+     RETURNING id, name, email, role, zone_id, collector_id, contact_phone, created_at`,
+    vals
   );
   return rows[0] ?? null;
 }
 
 /**
- * Residents in the zones assigned to a given collector, derived through
- * zones.assigned_collector_id (there is no direct collector↔resident link).
- *
- * Explicit projection only — never exposes email, password_hash, or role.
- * The users table has no phone column, so contact info is name + zone only.
+ * Residents who have CHOSEN this collector (users.collector_id = collectorId).
+ * More privacy-scoped than the old zone-default derivation: a collector sees only
+ * their own customers. Explicit projection — never exposes email/password/role.
  * Ordered by zone name then resident name for a stable, grouped UI.
  */
 export async function findResidentsForCollector(collectorId) {
@@ -86,7 +94,7 @@ export async function findResidentsForCollector(collectorId) {
      FROM users u
      JOIN zones z ON z.id = u.zone_id
      WHERE u.role = 'resident'
-       AND z.assigned_collector_id = $1
+       AND u.collector_id = $1
      ORDER BY z.name, u.name`,
     [collectorId]
   );

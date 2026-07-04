@@ -4,6 +4,7 @@ import jwt from 'jsonwebtoken';
 import crypto from 'crypto';
 import * as UserModel from '../models/user.model.js';
 import * as ZoneModel from '../models/zone.model.js';
+import * as ZoneCollectorModel from '../models/zoneCollector.model.js';
 import * as LoginCodeModel from '../models/loginCode.model.js';
 import * as Notifications from '../services/notifications.js';
 import { sendMail, APP } from '../utils/mailer.js';
@@ -42,12 +43,24 @@ async function issueLoginCode(user) {
 }
 
 export async function register(req, res) {
-  const { name, email, password, zone_id, contact_phone } = req.body;
+  const { name, email, password, zone_id, contact_phone, collector_id } = req.body;
 
   // zone_id shape is validated by registerRules; confirm it references a real zone
   // so we return a clean 400 rather than a raw foreign-key violation.
   const zone = await ZoneModel.findById(Number(zone_id));
   if (!zone) return res.status(400).json({ error: { message: 'Selected zone does not exist' } });
+
+  // Collector choice — never trust a supplied id; it must be approved+active for
+  // the selected zone (THE INVARIANT). When the resident doesn't choose one, we
+  // AUTO-ASSIGN a collector serving that zone (default first, else any eligible).
+  let chosenCollectorId;
+  if (collector_id !== undefined && collector_id !== null && collector_id !== '') {
+    const ok = await ZoneCollectorModel.isApprovedActive(Number(zone_id), Number(collector_id));
+    if (!ok) return res.status(400).json({ error: { message: 'Chosen collector is not approved for the selected zone' } });
+    chosenCollectorId = Number(collector_id);
+  } else {
+    chosenCollectorId = await ZoneCollectorModel.pickForZone(Number(zone_id));
+  }
 
   const password_hash = await bcrypt.hash(password, SALT_ROUNDS);
   // Role is always 'resident' for public registration — privilege escalation prevented here.
@@ -58,6 +71,7 @@ export async function register(req, res) {
     name, email, password_hash, role: 'resident',
     zone_id: Number(zone_id),
     contact_phone,
+    collector_id: chosenCollectorId,
   });
 
   // New account created in-person → issue the session directly (no OTP round-trip),

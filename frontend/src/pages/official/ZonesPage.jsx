@@ -1,6 +1,8 @@
 import { useEffect, useState } from 'react';
 import toast from 'react-hot-toast';
 import client, { extractError } from '../../api/client.js';
+import Modal from '../../components/Modal.jsx';
+import * as ZoneAPI from '../../api/zones.js';
 
 const EMPTY_FORM = { name: '', description: '' };
 
@@ -15,6 +17,7 @@ export default function ZonesPage() {
   const [formError, setFormError]   = useState('');
   const [submitting, setSubmitting] = useState(false);
   const [assignMap, setAssignMap]   = useState({});
+  const [manageZone, setManageZone] = useState(null);
 
   async function load() {
     setError('');
@@ -128,7 +131,7 @@ export default function ZonesPage() {
         <div style={{ ...s.tableWrap, overflowX: 'auto' }}>
           <table style={s.table}>
             <thead>
-              <tr>{['Zone', 'Description', 'Assigned Collector', 'Actions'].map(h => <th key={h} style={s.th}>{h}</th>)}</tr>
+              <tr>{['Zone', 'Description', 'Default & Approved Collectors', 'Actions'].map(h => <th key={h} style={s.th}>{h}</th>)}</tr>
             </thead>
             <tbody>
               {zones.map(z => (
@@ -136,10 +139,13 @@ export default function ZonesPage() {
                   <td style={{ ...s.td, fontWeight: 600 }}>{z.name}</td>
                   <td style={{ ...s.td, color: '#6b7280', maxWidth: '240px' }}>{z.description || <span style={{ color: '#d1d5db' }}>—</span>}</td>
                   <td style={s.td}>
-                    <select value={assignMap[z.id] ?? ''} onChange={e => handleAssign(z.id, e.target.value)} style={s.select} aria-label={`Assign collector to ${z.name}`}>
-                      <option value="">Unassigned</option>
-                      {collectors.map(c => <option key={c.id} value={String(c.id)}>{c.company_name}</option>)}
-                    </select>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap' }}>
+                      <select value={assignMap[z.id] ?? ''} onChange={e => handleAssign(z.id, e.target.value)} style={s.select} aria-label={`Default collector for ${z.name}`}>
+                        <option value="">Unassigned</option>
+                        {collectors.map(c => <option key={c.id} value={String(c.id)}>{c.company_name}</option>)}
+                      </select>
+                      <button onClick={() => setManageZone(z)} style={s.actionBtn}>Manage approved</button>
+                    </div>
                   </td>
                   <td style={s.td}>
                     <div style={s.actions}>
@@ -153,9 +159,139 @@ export default function ZonesPage() {
           </table>
         </div>
       )}
+
+      {manageZone && (
+        <ManageCollectorsModal
+          zone={manageZone}
+          allCollectors={collectors}
+          onClose={() => setManageZone(null)}
+          onChanged={load}
+        />
+      )}
     </div>
   );
 }
+
+/* ── Per-zone approved-collectors management ── */
+function ManageCollectorsModal({ zone, allCollectors, onClose, onChanged }) {
+  const [approved, setApproved] = useState([]);
+  const [loading, setLoading]   = useState(true);
+  const [addId, setAddId]       = useState('');
+  const [busy, setBusy]         = useState(false);
+
+  async function reload() {
+    try {
+      const res = await ZoneAPI.getZoneCollectors(zone.id);
+      setApproved(res.data.collectors);
+    } catch (err) {
+      toast.error(extractError(err, 'Failed to load approved collectors'));
+    } finally { setLoading(false); }
+  }
+
+  useEffect(() => { reload(); /* eslint-disable-next-line */ }, [zone.id]);
+
+  const approvedIds = new Set(approved.map(c => c.id));
+  const addable = allCollectors.filter(c => !approvedIds.has(c.id));
+
+  async function handleAdd() {
+    if (!addId) return;
+    setBusy(true);
+    try {
+      await ZoneAPI.approveZoneCollector(zone.id, Number(addId));
+      toast.success('Collector approved for this zone');
+      setAddId('');
+      await reload();
+      onChanged();
+    } catch (err) {
+      toast.error(extractError(err, 'Could not approve collector'));
+    } finally { setBusy(false); }
+  }
+
+  async function handleRemove(c) {
+    setBusy(true);
+    try {
+      await ZoneAPI.removeZoneCollector(zone.id, c.id);
+      toast.success(`${c.company_name} removed from this zone`);
+      await reload();
+      onChanged();
+    } catch (err) {
+      toast.error(extractError(err, 'Could not remove collector'));
+    } finally { setBusy(false); }
+  }
+
+  async function handleSetDefault(c) {
+    setBusy(true);
+    try {
+      await client.patch(`/api/zones/${zone.id}/assign`, { collector_id: c.id });
+      toast.success(`${c.company_name} is now the default`);
+      await reload();
+      onChanged();
+    } catch (err) {
+      toast.error(extractError(err, 'Could not set default'));
+    } finally { setBusy(false); }
+  }
+
+  return (
+    <Modal title={`Approved collectors — ${zone.name}`} onClose={onClose}>
+      {loading ? (
+        <p style={{ color: '#9ca3af', fontSize: '0.9rem' }}>Loading…</p>
+      ) : (
+        <>
+          {approved.length === 0 ? (
+            <p style={{ color: '#9ca3af', fontSize: '0.9rem', marginBottom: '1rem' }}>
+              No collectors approved for this zone yet. Add one below.
+            </p>
+          ) : (
+            <ul style={{ listStyle: 'none', display: 'flex', flexDirection: 'column', gap: '0.5rem', marginBottom: '1.25rem' }}>
+              {approved.map(c => (
+                <li key={c.id} style={m.row}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap' }}>
+                    <span style={{ fontWeight: 600, color: '#111827' }}>{c.company_name}</span>
+                    {c.is_default && <span style={{ ...m.badge, ...m.badgeGreen }}>Default</span>}
+                    {!c.active && <span style={{ ...m.badge, ...m.badgeGray }}>Inactive</span>}
+                  </div>
+                  <div style={{ display: 'flex', gap: '0.4rem' }}>
+                    {!c.is_default && (
+                      <button disabled={busy} onClick={() => handleSetDefault(c)} style={m.smallBtn}>Set default</button>
+                    )}
+                    {c.is_default ? (
+                      <button disabled title="Set another collector as default first" style={{ ...m.smallBtn, ...m.smallBtnDisabled }}>Remove</button>
+                    ) : (
+                      <button disabled={busy} onClick={() => handleRemove(c)} style={{ ...m.smallBtn, ...m.smallBtnDanger }}>Remove</button>
+                    )}
+                  </div>
+                </li>
+              ))}
+            </ul>
+          )}
+
+          <div style={{ borderTop: '1px solid #e5e7eb', paddingTop: '1rem' }}>
+            <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: 600, color: '#374151', marginBottom: '0.4rem' }}>
+              Approve another collector
+            </label>
+            <div style={{ display: 'flex', gap: '0.5rem' }}>
+              <select value={addId} onChange={e => setAddId(e.target.value)} style={{ ...s.select, flex: 1 }} disabled={busy || addable.length === 0}>
+                <option value="">{addable.length ? 'Select a collector…' : 'All active collectors already approved'}</option>
+                {addable.map(c => <option key={c.id} value={String(c.id)}>{c.company_name}</option>)}
+              </select>
+              <button onClick={handleAdd} disabled={busy || !addId} style={s.saveBtn}>Add</button>
+            </div>
+          </div>
+        </>
+      )}
+    </Modal>
+  );
+}
+
+const m = {
+  row: { display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '0.75rem', padding: '0.6rem 0.75rem', border: '1.5px solid #e5e7eb', borderRadius: '0.55rem' },
+  badge: { display: 'inline-block', padding: '0.15rem 0.5rem', borderRadius: '9999px', fontSize: '0.7rem', fontWeight: 600 },
+  badgeGreen: { background: '#dcfce7', color: '#15803d' },
+  badgeGray: { background: '#f3f4f6', color: '#6b7280' },
+  smallBtn: { padding: '0.3rem 0.6rem', border: '1.5px solid #e5e7eb', borderRadius: '0.4rem', fontSize: '0.75rem', fontWeight: 500, cursor: 'pointer', background: 'transparent', fontFamily: 'inherit', color: '#374151' },
+  smallBtnDanger: { borderColor: '#fecaca', color: '#dc2626' },
+  smallBtnDisabled: { opacity: 0.5, cursor: 'not-allowed' },
+};
 
 const s = {
   page:   { padding: '2rem 2.5rem', maxWidth: '1000px' },

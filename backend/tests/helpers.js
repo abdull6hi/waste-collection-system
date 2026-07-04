@@ -27,7 +27,7 @@ export function makeToken({ id, role }) {
  */
 export async function truncateTables() {
   await pool.query(`
-    TRUNCATE reports, complaints, pickups, schedules, zones,
+    TRUNCATE reports, complaints, pickups, schedules, zone_collectors, zones,
              collectors, users
     RESTART IDENTITY CASCADE
   `);

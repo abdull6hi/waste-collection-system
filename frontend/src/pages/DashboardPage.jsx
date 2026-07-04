@@ -5,6 +5,7 @@ import { useAuth } from '../context/AuthContext.jsx';
 import client, { extractError } from '../api/client.js';
 import * as ScheduleAPI   from '../api/schedules.js';
 import * as ComplaintAPI  from '../api/complaints.js';
+import { getPublicZoneCollectors } from '../api/zones.js';
 import Modal              from '../components/Modal.jsx';
 
 const DAYS = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
@@ -298,8 +299,10 @@ function ResidentDashboard({ user }) {
   // Zone is captured at registration and edited only via Profile — read-only here.
   // Derived from the auth user so a profile change reflects immediately.
   const zoneId = user?.zone_id ?? null;
+  const chosenCollectorId = user?.collector_id ?? null;
   const [zones,       setZones]       = useState([]);
   const [schedules,   setSchedules]   = useState([]);
+  const [zoneCollectors, setZoneCollectors] = useState([]);
   const [complaints,  setComplaints]  = useState([]);
   const [showReport,  setShowReport]  = useState(false);
   const [reportRef,   setReportRef]   = useState('');
@@ -316,8 +319,20 @@ function ResidentDashboard({ user }) {
       ScheduleAPI.getByZone(zoneId)
         .then(r => setSchedules(r.data.schedules))
         .catch(() => setSchedules([]));
+      getPublicZoneCollectors(zoneId)
+        .then(r => setZoneCollectors(r.data.collectors))
+        .catch(() => setZoneCollectors([]));
     }
   }, [zoneId]);
+
+  // The resident's chosen collector (name for display), and their schedule scoped
+  // to that collector when they've made a choice (else the whole zone schedule).
+  const chosenCollectorName = chosenCollectorId
+    ? zoneCollectors.find(c => c.id === chosenCollectorId)?.company_name ?? null
+    : null;
+  const shownSchedules = chosenCollectorId
+    ? schedules.filter(sc => sc.collector_id === chosenCollectorId)
+    : schedules;
 
   async function loadComplaints() {
     try {
@@ -365,15 +380,25 @@ function ResidentDashboard({ user }) {
         )}
         <p style={s.zoneHint}>Change your zone in Profile.</p>
 
-        {zoneId && schedules.length === 0 && (
-          <p style={{ ...s.muted, marginTop: '0.75rem' }}>No schedules published for this zone yet.</p>
+        {zoneId && (
+          <div style={{ marginTop: '0.75rem' }}>
+            <p style={{ ...s.label, marginBottom: '0.2rem' }}>Your collector</p>
+            <p style={s.zoneReadonly}>{chosenCollectorName ?? 'Assigned automatically'}</p>
+            <p style={s.zoneHint}>Choose a collector in Profile.</p>
+          </div>
         )}
 
-        {schedules.length > 0 && (
+        {zoneId && shownSchedules.length === 0 && (
+          <p style={{ ...s.muted, marginTop: '0.75rem' }}>No schedules published for this collector yet.</p>
+        )}
+
+        {shownSchedules.length > 0 && (
           <div style={{ marginTop: '0.75rem' }}>
-            <p style={s.schedsHeader}>Collection schedule for your zone</p>
+            <p style={s.schedsHeader}>
+              {chosenCollectorName ? `Collection schedule — ${chosenCollectorName}` : 'Collection schedule for your zone'}
+            </p>
             <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
-              {schedules.map(sc => (
+              {shownSchedules.map(sc => (
                 <div key={sc.id} style={s.schedRow}>
                   <span style={s.schedDay}>{DAYS[sc.day_of_week]}</span>
                   <span style={s.schedTime}>{sc.start_time?.slice(0, 5)}</span>

@@ -5,7 +5,7 @@ import { useAuth } from '../context/AuthContext.jsx';
 import Modal from './Modal.jsx';
 import { updateMyProfile, changeMyPassword } from '../api/users.js';
 import { getMyProfile as fetchCollectorProfile } from '../api/collectors.js';
-import { getZones } from '../api/zones.js';
+import { getZones, getPublicZoneCollectors } from '../api/zones.js';
 import { extractError } from '../api/client.js';
 import { roleLabel } from '../utils/roleLabel.js';
 
@@ -24,6 +24,8 @@ function EditProfileModal({ onClose }) {
   const [collectorInfo,setCollectorInfo]= useState(null);
   const [zones,        setZones]        = useState([]);
   const [zoneId,       setZoneId]       = useState(user?.zone_id ?? '');
+  const [zoneCollectors, setZoneCollectors] = useState([]);
+  const [collectorId,  setCollectorId]  = useState(user?.collector_id ?? '');
   const [profileErr,   setProfileErr]   = useState('');
   const [savingProfile,setSavingProfile]= useState(false);
 
@@ -48,6 +50,16 @@ function EditProfileModal({ onClose }) {
     }
   }, [user?.role]);
 
+  // Load the approved collectors for the resident's currently-selected zone.
+  useEffect(() => {
+    if (user?.role !== 'resident' || !zoneId) { setZoneCollectors([]); return; }
+    let active = true;
+    getPublicZoneCollectors(zoneId)
+      .then(r => { if (active) setZoneCollectors(r.data.collectors); })
+      .catch(() => { if (active) setZoneCollectors([]); });
+    return () => { active = false; };
+  }, [user?.role, zoneId]);
+
   async function handleSaveProfile(e) {
     e.preventDefault();
     setProfileErr('');
@@ -58,6 +70,9 @@ function EditProfileModal({ onClose }) {
       if (user?.role === 'resident') {
         payload.contact_phone = contactPhone.trim();
         if (zoneId) payload.zone_id = Number(zoneId);
+        // Always send collector_id so choosing OR clearing both persist; the
+        // server re-validates it is approved+active for the (effective) zone.
+        payload.collector_id = collectorId ? Number(collectorId) : null;
       }
       const res = await updateMyProfile(payload);
       const updated = res.data.user;
@@ -167,12 +182,29 @@ function EditProfileModal({ onClose }) {
                 Collection zone
                 <select
                   value={zoneId}
-                  onChange={e => setZoneId(e.target.value)}
+                  onChange={e => { setZoneId(e.target.value); setCollectorId(''); }}
                   style={s.input}
                 >
                   <option value="" disabled>Select your zone…</option>
                   {zones.map(z => (
                     <option key={z.id} value={z.id}>{z.name}</option>
+                  ))}
+                </select>
+              </label>
+
+              <label style={s.label}>
+                Your collector
+                <select
+                  value={collectorId}
+                  onChange={e => setCollectorId(e.target.value)}
+                  style={s.input}
+                  disabled={zoneCollectors.length === 0}
+                >
+                  <option value="" disabled>
+                    {zoneCollectors.length ? 'Select a collector…' : 'No collectors available for this zone'}
+                  </option>
+                  {zoneCollectors.map(c => (
+                    <option key={c.id} value={c.id}>{c.company_name}</option>
                   ))}
                 </select>
               </label>

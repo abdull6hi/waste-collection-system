@@ -19,6 +19,11 @@ export default defineConfig({
     poolOptions: {
       forks: { singleFork: true },
     },
+    // Run test FILES one at a time. The schema has a users↔collectors FK cycle,
+    // so concurrent `TRUNCATE … CASCADE` in per-file setup can deadlock; serial
+    // execution against the shared test DB avoids that. (vitest 4 replacement for
+    // the removed poolOptions-based serialization.)
+    fileParallelism: false,
     testTimeout: 20000,
     hookTimeout: 30000,
   },

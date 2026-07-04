@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import client, { extractError } from '../api/client.js';
-import { getPublicZones } from '../api/zones.js';
+import { getPublicZones, getPublicZoneCollectors } from '../api/zones.js';
 import { useAuth } from '../context/AuthContext.jsx';
 
 export default function RegisterPage() {
@@ -11,9 +11,10 @@ export default function RegisterPage() {
   // Role is always 'resident' for public registration.
   // Officials are provisioned by existing officials via the admin panel.
   // Collectors are created by officials via the Collectors management page.
-  const [form, setForm]     = useState({ name: '', email: '', password: '', zone_id: '', contact_phone: '' });
+  const [form, setForm]     = useState({ name: '', email: '', password: '', zone_id: '', contact_phone: '', collector_id: '' });
   const [zones, setZones]   = useState([]);
   const [zonesLoading, setZonesLoading] = useState(true);
+  const [collectors, setCollectors]     = useState([]);
   const [error, setError]   = useState('');
   const [loading, setLoading] = useState(false);
 
@@ -24,8 +25,20 @@ export default function RegisterPage() {
       .finally(() => setZonesLoading(false));
   }, []);
 
+  // Load the approved collectors for the selected zone (id + company_name only).
+  useEffect(() => {
+    if (!form.zone_id) { setCollectors([]); return; }
+    let active = true;
+    getPublicZoneCollectors(form.zone_id)
+      .then(res => { if (active) setCollectors(res.data.collectors); })
+      .catch(() => { if (active) setCollectors([]); });
+    return () => { active = false; };
+  }, [form.zone_id]);
+
   function handleChange(e) {
-    setForm(f => ({ ...f, [e.target.name]: e.target.value }));
+    const { name, value } = e.target;
+    // Changing zone invalidates any collector choice — reset it.
+    setForm(f => name === 'zone_id' ? { ...f, zone_id: value, collector_id: '' } : { ...f, [name]: value });
   }
 
   async function handleSubmit(e) {
@@ -48,6 +61,7 @@ export default function RegisterPage() {
         password: form.password,
         zone_id: Number(form.zone_id),
         contact_phone: form.contact_phone.trim(),
+        ...(form.collector_id ? { collector_id: Number(form.collector_id) } : {}),
       });
       login(res.data.token, res.data.user);
       navigate('/dashboard');
@@ -121,6 +135,23 @@ export default function RegisterPage() {
               style={styles.input} placeholder="+254 700 000 000" maxLength={20}
             />
           </label>
+
+          {form.zone_id && collectors.length > 0 && (
+            <label style={styles.label} htmlFor="reg-collector">
+              Preferred collector <span style={styles.optional}>(optional — we'll assign one for your zone if you skip this)</span>
+              <select
+                id="reg-collector"
+                name="collector_id"
+                value={form.collector_id} onChange={handleChange}
+                style={styles.input}
+              >
+                <option value="" disabled>Select a collector…</option>
+                {collectors.map(c => (
+                  <option key={c.id} value={c.id}>{c.company_name}</option>
+                ))}
+              </select>
+            </label>
+          )}
 
           {error && <p role="alert" style={styles.error}>{error}</p>}
 
@@ -196,4 +227,5 @@ const styles = {
   },
   footer: { textAlign: 'center', marginTop: '1.5rem', fontSize: '0.875rem', color: '#6b7280' },
   link:   { color: '#16a34a', fontWeight: 600 },
+  optional: { fontWeight: 400, color: '#9ca3af', fontSize: '0.78rem' },
 };

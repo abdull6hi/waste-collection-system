@@ -2,21 +2,34 @@
 import * as ComplaintModel from '../models/complaint.model.js';
 import * as CollectorModel from '../models/collector.model.js';
 import * as ZoneModel      from '../models/zone.model.js';
+import * as UserModel      from '../models/user.model.js';
+import * as ZoneCollectorModel from '../models/zoneCollector.model.js';
 import * as Notifications  from '../services/notifications.js';
 import { assertOwnsComplaint } from '../middleware/ownership.js';
 
 export async function submit(req, res) {
   const { zone_id, category, description } = req.body;
+  const zoneId = Number(zone_id);
 
-  const zone = await ZoneModel.findById(Number(zone_id));
+  const zone = await ZoneModel.findById(zoneId);
   if (!zone) return res.status(404).json({ error: { message: 'Zone not found' } });
+
+  // Routing (server-side only — a collector id is never accepted from the client):
+  // the resident's chosen collector when the complaint is in their OWN zone and
+  // that choice is still approved+active; otherwise the zone default; otherwise null.
+  let assignedCollectorId = zone.assigned_collector_id ?? null;
+  const resident = await UserModel.findById(req.user.id);
+  if (resident?.collector_id && resident.zone_id === zoneId) {
+    const ok = await ZoneCollectorModel.isApprovedActive(zoneId, resident.collector_id);
+    if (ok) assignedCollectorId = resident.collector_id;
+  }
 
   const complaint = await ComplaintModel.create({
     residentId:          req.user.id,
-    zoneId:              Number(zone_id),
+    zoneId,
     category,
     description,
-    assignedCollectorId: zone.assigned_collector_id ?? null,
+    assignedCollectorId,
   });
 
   // Notify the resident, the assigned collector, and officials (fire-and-forget).

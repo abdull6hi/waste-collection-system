@@ -82,6 +82,24 @@ async function seed() {
     /* Assign resident to zone 1 */
     await client.query('UPDATE users SET zone_id=$1 WHERE id=$2', [zId1, residentId]);
 
+    /* ── 3b. Approved collectors per zone (zone_collectors) ────── */
+    // Each zone's default must also be an approved pair (the invariant). Westlands
+    // North gets a SECOND approved collector so residents there have a real choice.
+    const zoneApprovals = [
+      [zId1, cId1], [zId1, cId2],   // Westlands North: EcoClean (default) + GreenPick
+      [zId2, cId2],                 // Karen Township:  GreenPick (default)
+      [zId3, cId3],                 // Langata East:    NairobiWaste (default)
+    ];
+    for (const [zoneId, collectorId] of zoneApprovals) {
+      await client.query(
+        'INSERT INTO zone_collectors (zone_id, collector_id) VALUES ($1,$2) ON CONFLICT DO NOTHING',
+        [zoneId, collectorId]
+      );
+    }
+
+    /* Resident's chosen collector = their zone's default (approved + active) */
+    await client.query('UPDATE users SET collector_id=$1 WHERE id=$2', [cId1, residentId]);
+
     /* ── 4. Schedules ─────────────────────────────────────────── */
     const schedDefs = [
       { zone_id: zId1, collector_id: cId1, day_of_week: 1, start_time: '07:00', frequency: 'weekly' },

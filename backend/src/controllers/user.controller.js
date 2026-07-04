@@ -3,6 +3,7 @@ import bcrypt from 'bcrypt';
 import * as UserModel from '../models/user.model.js';
 import * as CollectorModel from '../models/collector.model.js';
 import * as ZoneModel from '../models/zone.model.js';
+import * as ZoneCollectorModel from '../models/zoneCollector.model.js';
 
 export async function setMyZone(req, res) {
   const { zone_id } = req.body;
@@ -12,22 +13,49 @@ export async function setMyZone(req, res) {
 }
 
 export async function updateMyProfile(req, res) {
-  const { name, email, contact_phone, zone_id } = req.body;
+  const { name, email, contact_phone, zone_id, collector_id } = req.body;
+  const isResident = req.user.role === 'resident';
+
+  // Fetch current state (residents) to detect zone changes and to know the
+  // effective zone against which a collector choice must be validated.
+  const current = isResident ? await UserModel.findById(req.user.id) : null;
 
   const zoneProvided = zone_id !== undefined && zone_id !== null && zone_id !== '';
+  let effectiveZoneId = current?.zone_id ?? null;
   if (zoneProvided) {
-    // Clean 400 instead of a raw FK error if the zone doesn't exist.
     const zone = await ZoneModel.findById(Number(zone_id));
     if (!zone) return res.status(400).json({ error: { message: 'Selected zone does not exist' } });
+    effectiveZoneId = Number(zone_id);
   }
 
-  // Residents persist contact_phone + zone_id on their own users row. Collectors
-  // keep contact_phone on the collectors table (handled below), so we don't write
-  // those columns for them.
+  // Residents persist contact_phone + zone_id + collector_id on their own users
+  // row. Collectors keep contact_phone on the collectors table (handled below).
   const updates = { name, email };
-  if (req.user.role === 'resident') {
+  if (isResident) {
     if (contact_phone !== undefined) updates.contact_phone = contact_phone ?? null;
-    if (zoneProvided) updates.zone_id = Number(zone_id);
+    if (zoneProvided) updates.zone_id = effectiveZoneId;
+
+    const zoneChanged = zoneProvided && Number(zone_id) !== (current?.zone_id ?? null);
+
+    if (collector_id !== undefined) {
+      if (collector_id === null || collector_id === '') {
+        updates.collector_id = null;           // explicit clear
+      } else {
+        // THE INVARIANT — chosen collector must be approved+active for the
+        // effective (possibly newly-selected) zone. Never trust the client value.
+        const cid = Number(collector_id);
+        const ok = effectiveZoneId != null &&
+          await ZoneCollectorModel.isApprovedActive(effectiveZoneId, cid);
+        if (!ok) {
+          return res.status(400).json({ error: { message: 'Chosen collector is not approved for your zone' } });
+        }
+        updates.collector_id = cid;
+      }
+    } else if (zoneChanged) {
+      // Zone changed without a fresh choice → clear it so it can't point at a
+      // collector not approved for the new zone (rule #4).
+      updates.collector_id = null;
+    }
   }
 
   const user = await UserModel.updateProfile(req.user.id, updates);
