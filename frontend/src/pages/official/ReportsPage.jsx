@@ -46,6 +46,12 @@ export default function ReportsPage() {
   const [histLoading,setHistLoading]= useState(true);
   const [histError,  setHistError]  = useState('');
 
+  // View scope over the currently displayed report (client-side re-slice only).
+  const [scope,    setScope]    = useState('all');      // 'all' | 'collector' | 'zone'
+  const [entityId, setEntityId] = useState(null);       // selected collector_id / zone_id
+
+  function resetScope() { setScope('all'); setEntityId(null); }
+
   async function loadHistory() {
     setHistLoading(true); setHistError('');
     try {
@@ -65,6 +71,7 @@ export default function ReportsPage() {
     try {
       const res = await ReportAPI.generate({ from, to });
       setReport(res.data.report);
+      resetScope();
       toast.success('Report generated');
       await loadHistory();
     } catch (err) {
@@ -76,19 +83,51 @@ export default function ReportsPage() {
     try {
       const res = await ReportAPI.getOne(id);
       setReport(res.data.report);
+      resetScope();
     } catch {
       // silently ignore
     }
   }
 
-  async function handleDownload(id, r) {
+  async function handleDownload(id, r, activeScope) {
     const periodFrom = r?.summary_json?.period?.from || r?.period_start;
     const periodTo   = r?.summary_json?.period?.to   || r?.period_end;
-    const name = `nema-report-${periodFrom}_to_${periodTo}.csv`;
-    await ReportAPI.downloadCsv(id, name);
+    const suffix = activeScope ? `-${activeScope.scope}-${activeScope.entityId}` : '';
+    const name = `nema-report-${periodFrom}_to_${periodTo}${suffix}.csv`;
+    await ReportAPI.downloadCsv(id, name, activeScope);
   }
 
   const summary = report?.summary_json;
+
+  // Derived scope selections (re-slice of the already-loaded summary_json).
+  const collectors = summary?.pickups?.byCollector ?? [];
+  const zones      = summary?.pickups?.byZone ?? [];
+  const selectedCollector = scope === 'collector'
+    ? collectors.find(c => c.collector_id === entityId) ?? null
+    : null;
+  const selectedZone = scope === 'zone'
+    ? zones.find(z => z.zone_id === entityId) ?? null
+    : null;
+  const selectedZoneComplaints = selectedZone
+    ? (summary.complaints.byZone.find(z => z.zone_id === entityId) ?? {})
+    : null;
+  const activeScope = scope === 'all' ? null : { scope, entityId };
+
+  function chooseScope(next) {
+    if (next === 'all') return resetScope();
+    if (next === 'collector') {
+      setScope('collector');
+      setEntityId(prev => (collectors.find(c => c.collector_id === prev) ? prev : collectors[0]?.collector_id ?? null));
+    } else if (next === 'zone') {
+      setScope('zone');
+      setEntityId(prev => (zones.find(z => z.zone_id === prev) ? prev : zones[0]?.zone_id ?? null));
+    }
+  }
+
+  function drillTo(nextScope, id) {
+    setScope(nextScope);
+    setEntityId(id);
+  }
 
   return (
     <div style={s.page}>
@@ -121,6 +160,9 @@ export default function ReportsPage() {
       {/* Report results */}
       {summary && (
         <div style={s.section}>
+          {/* Row-hover affordance for drill-down (resting appearance unchanged). */}
+          <style>{`.rpt-click-row { cursor: pointer; } .rpt-click-row:hover { background: #f9fafb; } .rpt-name-btn:hover { text-decoration: underline; }`}</style>
+
           <div style={s.resultHeader}>
             <div>
               <h2 style={s.sectionTitle}>
@@ -131,113 +173,248 @@ export default function ReportsPage() {
               </p>
             </div>
             <div style={{ display: 'flex', gap: '0.75rem' }}>
-              <button onClick={() => handleDownload(report.id, report)} style={s.outlineBtn}>
-                Download CSV
+              <button onClick={() => handleDownload(report.id, report, activeScope)} style={s.outlineBtn}>
+                Download CSV{scope !== 'all' ? ' (scoped)' : ''}
               </button>
-              <button onClick={() => navigate(`/reports/${report.id}/print`)} style={s.outlineBtn}>
+              <button onClick={() => navigate(`/reports/${report.id}/print${ReportAPI.scopeQuery(activeScope)}`)} style={s.outlineBtn}>
                 View printable report
               </button>
             </div>
           </div>
 
-          {/* Summary cards */}
-          <div style={s.cards}>
-            <StatCard
-              label="Completion rate"
-              value={pct(summary.pickups.overall.completionRate)}
-              sub={`${summary.pickups.overall.completed}/${summary.pickups.overall.total} pickups`}
-              color="#15803d"
-            />
-            <StatCard
-              label="Total complaints"
-              value={fmt(summary.complaints.overall.total)}
-              sub={`${fmt(summary.complaints.overall.open)} open`}
-              color="#d97706"
-            />
-            <StatCard
-              label="Complaints resolved"
-              value={fmt(summary.complaints.overall.resolved)}
-              sub={`of ${summary.complaints.overall.total} total`}
-              color="#2563eb"
-            />
-            <StatCard
-              label="Avg resolution time"
-              value={fmtHrs(summary.complaints.overall.avg_resolution_hours)}
-              sub="over resolved complaints"
-              color="#7c3aed"
-            />
+          {/* Scope control */}
+          <div style={s.scopeBar}>
+            <div style={s.segGroup} role="group" aria-label="Report scope">
+              {[
+                { key: 'all',       label: 'All' },
+                { key: 'collector', label: 'By collector' },
+                { key: 'zone',      label: 'By zone' },
+              ].map(opt => (
+                <button
+                  key={opt.key}
+                  type="button"
+                  onClick={() => chooseScope(opt.key)}
+                  aria-pressed={scope === opt.key}
+                  style={{ ...s.segBtn, ...(scope === opt.key ? s.segBtnActive : {}) }}
+                >
+                  {opt.label}
+                </button>
+              ))}
+            </div>
+
+            {scope === 'collector' && collectors.length > 0 && (
+              <label style={s.entityPick}>
+                <span style={s.entityPickLabel}>Collector</span>
+                <select
+                  value={entityId ?? ''}
+                  onChange={e => setEntityId(Number(e.target.value))}
+                  style={s.fi}
+                >
+                  {collectors.map(c => (
+                    <option key={c.collector_id} value={c.collector_id}>{c.company_name}</option>
+                  ))}
+                </select>
+              </label>
+            )}
+            {scope === 'zone' && zones.length > 0 && (
+              <label style={s.entityPick}>
+                <span style={s.entityPickLabel}>Zone</span>
+                <select
+                  value={entityId ?? ''}
+                  onChange={e => setEntityId(Number(e.target.value))}
+                  style={s.fi}
+                >
+                  {zones.map(z => (
+                    <option key={z.zone_id} value={z.zone_id}>{z.zone_name}</option>
+                  ))}
+                </select>
+              </label>
+            )}
+
+            {scope !== 'all' && (
+              <button type="button" onClick={resetScope} style={s.backLink}>
+                ← Back to full report
+              </button>
+            )}
           </div>
 
-          {/* By-collector table */}
-          <h3 style={s.tableTitle}>Collector performance</h3>
-          {summary.pickups.byCollector.length === 0 ? (
-            <p style={s.muted}>No pickup data for this period.</p>
-          ) : (
-            <div style={s.tableWrap}>
-              <table style={s.table}>
-                <thead>
-                  <tr>
-                    {['Collector', 'Scheduled', 'Completed', 'Missed', 'Completion rate'].map(h => (
-                      <th key={h} style={s.th}>{h}</th>
-                    ))}
-                  </tr>
-                </thead>
-                <tbody>
-                  {summary.pickups.byCollector.map(r => (
-                    <tr key={r.collector_id} style={s.tr}>
-                      <td style={{ ...s.td, fontWeight: 600 }}>{r.company_name}</td>
-                      <td style={s.td}>{r.total}</td>
-                      <td style={s.td}>{r.completed}</td>
-                      <td style={s.td}>{r.missed}</td>
-                      <td style={s.td}>
-                        <span style={{ ...s.rateBadge, background: rateColor(r.completionRate).bg, color: rateColor(r.completionRate).fg }}>
-                          {pct(r.completionRate)}
-                        </span>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
+          {/* ── ALL scope: full report (unchanged layout) ── */}
+          {scope === 'all' && (
+            <>
+              <div style={s.cards}>
+                <StatCard
+                  label="Completion rate"
+                  value={pct(summary.pickups.overall.completionRate)}
+                  sub={`${summary.pickups.overall.completed}/${summary.pickups.overall.total} pickups`}
+                  color="#15803d"
+                />
+                <StatCard
+                  label="Total complaints"
+                  value={fmt(summary.complaints.overall.total)}
+                  sub={`${fmt(summary.complaints.overall.open)} open`}
+                  color="#d97706"
+                />
+                <StatCard
+                  label="Complaints resolved"
+                  value={fmt(summary.complaints.overall.resolved)}
+                  sub={`of ${summary.complaints.overall.total} total`}
+                  color="#2563eb"
+                />
+                <StatCard
+                  label="Avg resolution time"
+                  value={fmtHrs(summary.complaints.overall.avg_resolution_hours)}
+                  sub="over resolved complaints"
+                  color="#7c3aed"
+                />
+              </div>
+
+              {/* By-collector table */}
+              <h3 style={s.tableTitle}>Collector performance</h3>
+              {summary.pickups.byCollector.length === 0 ? (
+                <p style={s.muted}>No pickup data for this period.</p>
+              ) : (
+                <div style={s.tableWrap}>
+                  <table style={s.table}>
+                    <thead>
+                      <tr>
+                        {['Collector', 'Scheduled', 'Completed', 'Missed', 'Completion rate'].map(h => (
+                          <th key={h} style={s.th}>{h}</th>
+                        ))}
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {summary.pickups.byCollector.map(r => (
+                        <tr
+                          key={r.collector_id}
+                          style={s.tr}
+                          className="rpt-click-row"
+                          onClick={() => drillTo('collector', r.collector_id)}
+                        >
+                          <td style={{ ...s.td, fontWeight: 600 }}>
+                            <button
+                              type="button"
+                              className="rpt-name-btn"
+                              style={s.nameBtn}
+                              onClick={(e) => { e.stopPropagation(); drillTo('collector', r.collector_id); }}
+                            >
+                              {r.company_name}
+                            </button>
+                          </td>
+                          <td style={s.td}>{r.total}</td>
+                          <td style={s.td}>{r.completed}</td>
+                          <td style={s.td}>{r.missed}</td>
+                          <td style={s.td}>
+                            <span style={{ ...s.rateBadge, background: rateColor(r.completionRate).bg, color: rateColor(r.completionRate).fg }}>
+                              {pct(r.completionRate)}
+                            </span>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+
+              {/* By-zone table */}
+              <h3 style={s.tableTitle}>Zone performance</h3>
+              {summary.pickups.byZone.length === 0 ? (
+                <p style={s.muted}>No zone data for this period.</p>
+              ) : (
+                <div style={s.tableWrap}>
+                  <table style={s.table}>
+                    <thead>
+                      <tr>
+                        {['Zone', 'Scheduled', 'Completed', 'Missed', 'Completion rate', 'Complaints', 'Resolved', 'Avg resolution'].map(h => (
+                          <th key={h} style={s.th}>{h}</th>
+                        ))}
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {summary.pickups.byZone.map(zp => {
+                        const zc = summary.complaints.byZone.find(z => z.zone_id === zp.zone_id) ?? {};
+                        return (
+                          <tr
+                            key={zp.zone_id}
+                            style={s.tr}
+                            className="rpt-click-row"
+                            onClick={() => drillTo('zone', zp.zone_id)}
+                          >
+                            <td style={{ ...s.td, fontWeight: 600 }}>
+                              <button
+                                type="button"
+                                className="rpt-name-btn"
+                                style={s.nameBtn}
+                                onClick={(e) => { e.stopPropagation(); drillTo('zone', zp.zone_id); }}
+                              >
+                                {zp.zone_name}
+                              </button>
+                            </td>
+                            <td style={s.td}>{zp.total}</td>
+                            <td style={s.td}>{zp.completed}</td>
+                            <td style={s.td}>{zp.missed}</td>
+                            <td style={s.td}>
+                              <span style={{ ...s.rateBadge, background: rateColor(zp.completionRate).bg, color: rateColor(zp.completionRate).fg }}>
+                                {pct(zp.completionRate)}
+                              </span>
+                            </td>
+                            <td style={s.td}>{fmt(zc.total ?? 0)}</td>
+                            <td style={s.td}>{fmt(zc.resolved ?? 0)}</td>
+                            <td style={s.td}>{fmtHrs(zc.avg_resolution_hours)}</td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </>
           )}
 
-          {/* By-zone table */}
-          <h3 style={s.tableTitle}>Zone performance</h3>
-          {summary.pickups.byZone.length === 0 ? (
-            <p style={s.muted}>No zone data for this period.</p>
-          ) : (
-            <div style={s.tableWrap}>
-              <table style={s.table}>
-                <thead>
-                  <tr>
-                    {['Zone', 'Scheduled', 'Completed', 'Missed', 'Completion rate', 'Complaints', 'Resolved', 'Avg resolution'].map(h => (
-                      <th key={h} style={s.th}>{h}</th>
-                    ))}
-                  </tr>
-                </thead>
-                <tbody>
-                  {summary.pickups.byZone.map(zp => {
-                    const zc = summary.complaints.byZone.find(z => z.zone_id === zp.zone_id) ?? {};
-                    return (
-                      <tr key={zp.zone_id} style={s.tr}>
-                        <td style={{ ...s.td, fontWeight: 600 }}>{zp.zone_name}</td>
-                        <td style={s.td}>{zp.total}</td>
-                        <td style={s.td}>{zp.completed}</td>
-                        <td style={s.td}>{zp.missed}</td>
-                        <td style={s.td}>
-                          <span style={{ ...s.rateBadge, background: rateColor(zp.completionRate).bg, color: rateColor(zp.completionRate).fg }}>
-                            {pct(zp.completionRate)}
-                          </span>
-                        </td>
-                        <td style={s.td}>{fmt(zc.total ?? 0)}</td>
-                        <td style={s.td}>{fmt(zc.resolved ?? 0)}</td>
-                        <td style={s.td}>{fmtHrs(zc.avg_resolution_hours)}</td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            </div>
+          {/* ── COLLECTOR scope: focused panel (pickups only) ── */}
+          {scope === 'collector' && (
+            collectors.length === 0 ? (
+              <p style={s.muted}>No collector data for this period.</p>
+            ) : !selectedCollector ? (
+              <p style={s.muted}>Select a collector to view their performance.</p>
+            ) : (
+              <div style={s.panel}>
+                <h3 style={s.panelTitle}>Collector: {selectedCollector.company_name}</h3>
+                <div style={s.cards}>
+                  <StatCard label="Scheduled" value={fmt(selectedCollector.total)} sub="pickups in period" color="#374151" />
+                  <StatCard label="Completed" value={fmt(selectedCollector.completed)} sub="pickups done" color="#15803d" />
+                  <StatCard label="Missed" value={fmt(selectedCollector.missed)} sub="not collected" color="#dc2626" />
+                  <StatCard label="Completion rate" value={pct(selectedCollector.completionRate)} sub={`${selectedCollector.completed}/${selectedCollector.total} pickups`} color="#2563eb" />
+                </div>
+                <p style={s.scopeNote}>Complaints are tracked per zone, not per collector.</p>
+              </div>
+            )
+          )}
+
+          {/* ── ZONE scope: focused panel (pickups + complaints) ── */}
+          {scope === 'zone' && (
+            zones.length === 0 ? (
+              <p style={s.muted}>No zone data for this period.</p>
+            ) : !selectedZone ? (
+              <p style={s.muted}>Select a zone to view its performance.</p>
+            ) : (
+              <div style={s.panel}>
+                <h3 style={s.panelTitle}>Zone: {selectedZone.zone_name}</h3>
+                <h4 style={s.panelSub}>Pickup performance</h4>
+                <div style={s.cards}>
+                  <StatCard label="Scheduled" value={fmt(selectedZone.total)} sub="pickups in period" color="#374151" />
+                  <StatCard label="Completed" value={fmt(selectedZone.completed)} sub="pickups done" color="#15803d" />
+                  <StatCard label="Missed" value={fmt(selectedZone.missed)} sub="not collected" color="#dc2626" />
+                  <StatCard label="Completion rate" value={pct(selectedZone.completionRate)} sub={`${selectedZone.completed}/${selectedZone.total} pickups`} color="#2563eb" />
+                </div>
+                <h4 style={s.panelSub}>Complaints</h4>
+                <div style={s.cards}>
+                  <StatCard label="Total complaints" value={fmt(selectedZoneComplaints.total ?? 0)} sub="in this zone" color="#d97706" />
+                  <StatCard label="Resolved" value={fmt(selectedZoneComplaints.resolved ?? 0)} sub={`of ${fmt(selectedZoneComplaints.total ?? 0)} total`} color="#15803d" />
+                  <StatCard label="Open" value={fmt(selectedZoneComplaints.open ?? 0)} sub="still unresolved" color="#dc2626" />
+                  <StatCard label="Avg resolution" value={fmtHrs(selectedZoneComplaints.avg_resolution_hours)} sub="over resolved complaints" color="#7c3aed" />
+                </div>
+              </div>
+            )
           )}
         </div>
       )}
@@ -339,4 +516,16 @@ const s = {
   empty:       { padding: '2rem', textAlign: 'center', background: '#fff', border: '1.5px dashed #e5e7eb', borderRadius: '0.875rem', color: '#9ca3af', fontSize: '0.9rem' },
   outlineBtn:  { padding: '0.5rem 1rem', background: 'transparent', border: '1.5px solid #d1d5db', borderRadius: '0.55rem', fontSize: '0.875rem', cursor: 'pointer', fontFamily: 'inherit', color: '#374151', fontWeight: 500 },
   actionBtn:   { padding: '0.3rem 0.7rem', border: '1.5px solid #e5e7eb', borderRadius: '0.4rem', fontSize: '0.8rem', fontWeight: 500, cursor: 'pointer', background: 'transparent', fontFamily: 'inherit', color: '#374151' },
+  scopeBar:    { display: 'flex', alignItems: 'flex-end', gap: '1rem', flexWrap: 'wrap', marginBottom: '1.5rem' },
+  segGroup:    { display: 'inline-flex', border: '1.5px solid #d1d5db', borderRadius: '0.55rem', overflow: 'hidden' },
+  segBtn:      { padding: '0.5rem 1rem', background: '#fff', border: 'none', borderRight: '1px solid #e5e7eb', fontSize: '0.875rem', fontWeight: 500, cursor: 'pointer', fontFamily: 'inherit', color: '#374151' },
+  segBtnActive:{ background: '#16a34a', color: '#fff', fontWeight: 600 },
+  entityPick:  { display: 'flex', flexDirection: 'column', gap: '0.3rem', fontSize: '0.8rem', fontWeight: 500, color: '#374151' },
+  entityPickLabel: { fontSize: '0.8rem', fontWeight: 500, color: '#374151' },
+  backLink:    { padding: '0.5rem 0.5rem', background: 'transparent', border: 'none', color: '#16a34a', fontSize: '0.875rem', fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit' },
+  nameBtn:     { background: 'none', border: 'none', padding: 0, font: 'inherit', color: 'inherit', fontWeight: 600, cursor: 'pointer', textAlign: 'left' },
+  panel:       { background: '#fff', border: '1.5px solid #e5e7eb', borderRadius: '0.875rem', padding: '1.5rem' },
+  panelTitle:  { fontSize: '1rem', fontWeight: 700, color: '#111827', marginBottom: '1rem' },
+  panelSub:    { fontSize: '0.85rem', fontWeight: 600, color: '#374151', margin: '1rem 0 0.6rem' },
+  scopeNote:   { marginTop: '1rem', color: '#9ca3af', fontSize: '0.85rem', fontStyle: 'italic' },
 };

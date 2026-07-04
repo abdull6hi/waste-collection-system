@@ -83,6 +83,15 @@ export async function exportCsv(req, res) {
   const summary = report.summary_json;
   const { period, pickups, complaints } = summary;
 
+  // Optional VIEW scope — filters which sections are written to the CSV.
+  // No params (or an unrecognised scope) → the exact full report, unchanged.
+  const scope    = req.query.scope;
+  const entityId = req.query.entityId != null && req.query.entityId !== ''
+    ? Number(req.query.entityId)
+    : null;
+  const scopedCollector = scope === 'collector' && Number.isFinite(entityId);
+  const scopedZone      = scope === 'zone'      && Number.isFinite(entityId);
+
   function csvEscape(v) {
     const s = String(v ?? '');
     if (s.includes(',') || s.includes('"') || s.includes('\n') || s.includes('\r')) {
@@ -96,6 +105,7 @@ export async function exportCsv(req, res) {
   }
 
   const lines = [];
+  let filenameSuffix = '';
 
   lines.push(row('NEMA Performance Report'));
   lines.push(row(`Period: ${period.from} to ${period.to}`));
@@ -103,43 +113,68 @@ export async function exportCsv(req, res) {
   lines.push(row(`Generated on: ${new Date(summary.generatedAt).toISOString()}`));
   lines.push('');
 
-  lines.push(row('Overall Summary'));
-  lines.push(row('Total Pickups', 'Completed', 'Missed', 'Completion Rate (%)'));
-  const ov = pickups.overall;
-  lines.push(row(ov.total, ov.completed, ov.total - ov.completed, (ov.completionRate * 100).toFixed(1)));
-  lines.push('');
+  if (scopedCollector) {
+    const c = pickups.byCollector.find(x => x.collector_id === entityId);
+    filenameSuffix = `-collector-${entityId}`;
+    lines.push(row('Collector Performance'));
+    lines.push(row('Collector', 'Scheduled', 'Completed', 'Missed', 'Completion Rate (%)'));
+    if (c) {
+      lines.push(row(c.company_name, c.total, c.completed, c.missed, (c.completionRate * 100).toFixed(1)));
+    }
+    lines.push('');
+    lines.push(row('Note: Complaints are tracked per zone, not per collector.'));
+  } else if (scopedZone) {
+    const z = pickups.byZone.find(x => x.zone_id === entityId);
+    const cz = (complaints.byZone ?? []).find(x => x.zone_id === entityId) ?? {};
+    filenameSuffix = `-zone-${entityId}`;
+    lines.push(row('Zone Performance'));
+    lines.push(row('Zone', 'Scheduled', 'Completed', 'Missed', 'Completion Rate (%)', 'Complaints', 'Resolved', 'Avg Resolution (hrs)'));
+    if (z) {
+      lines.push(row(
+        z.zone_name, z.total, z.completed, z.missed,
+        (z.completionRate * 100).toFixed(1),
+        cz.total ?? 0, cz.resolved ?? 0, cz.avg_resolution_hours ?? '—',
+      ));
+    }
+  } else {
+    lines.push(row('Overall Summary'));
+    lines.push(row('Total Pickups', 'Completed', 'Missed', 'Completion Rate (%)'));
+    const ov = pickups.overall;
+    lines.push(row(ov.total, ov.completed, ov.total - ov.completed, (ov.completionRate * 100).toFixed(1)));
+    lines.push('');
 
-  lines.push(row('Collector Performance'));
-  lines.push(row('Collector', 'Scheduled', 'Completed', 'Missed', 'Completion Rate (%)'));
-  for (const c of pickups.byCollector) {
-    lines.push(row(c.company_name, c.total, c.completed, c.missed, (c.completionRate * 100).toFixed(1)));
+    lines.push(row('Collector Performance'));
+    lines.push(row('Collector', 'Scheduled', 'Completed', 'Missed', 'Completion Rate (%)'));
+    for (const c of pickups.byCollector) {
+      lines.push(row(c.company_name, c.total, c.completed, c.missed, (c.completionRate * 100).toFixed(1)));
+    }
+    lines.push('');
+
+    const zoneComplaintMap = {};
+    for (const z of (complaints.byZone ?? [])) {
+      zoneComplaintMap[z.zone_name] = z;
+    }
+
+    lines.push(row('Zone Performance'));
+    lines.push(row('Zone', 'Scheduled', 'Completed', 'Missed', 'Completion Rate (%)', 'Complaints', 'Resolved', 'Avg Resolution (hrs)'));
+    for (const z of pickups.byZone) {
+      const cz = zoneComplaintMap[z.zone_name] ?? {};
+      lines.push(row(
+        z.zone_name, z.total, z.completed, z.missed,
+        (z.completionRate * 100).toFixed(1),
+        cz.total ?? 0, cz.resolved ?? 0, cz.avg_resolution_hours ?? '—',
+      ));
+    }
+    lines.push('');
+
+    lines.push(row('Complaint Summary'));
+    lines.push(row('Total', 'Resolved', 'Open', 'Avg Resolution (hrs)'));
+    const oc = complaints.overall;
+    lines.push(row(oc.total, oc.resolved, oc.open, oc.avg_resolution_hours ?? '—'));
   }
-  lines.push('');
-
-  const zoneComplaintMap = {};
-  for (const z of (complaints.byZone ?? [])) {
-    zoneComplaintMap[z.zone_name] = z;
-  }
-
-  lines.push(row('Zone Performance'));
-  lines.push(row('Zone', 'Scheduled', 'Completed', 'Missed', 'Completion Rate (%)', 'Complaints', 'Resolved', 'Avg Resolution (hrs)'));
-  for (const z of pickups.byZone) {
-    const cz = zoneComplaintMap[z.zone_name] ?? {};
-    lines.push(row(
-      z.zone_name, z.total, z.completed, z.missed,
-      (z.completionRate * 100).toFixed(1),
-      cz.total ?? 0, cz.resolved ?? 0, cz.avg_resolution_hours ?? '—',
-    ));
-  }
-  lines.push('');
-
-  lines.push(row('Complaint Summary'));
-  lines.push(row('Total', 'Resolved', 'Open', 'Avg Resolution (hrs)'));
-  const oc = complaints.overall;
-  lines.push(row(oc.total, oc.resolved, oc.open, oc.avg_resolution_hours ?? '—'));
 
   const csv = lines.join('\r\n');
   res.setHeader('Content-Type', 'text/csv; charset=utf-8');
-  res.setHeader('Content-Disposition', `attachment; filename="nema-report-${period.from}_to_${period.to}.csv"`);
+  res.setHeader('Content-Disposition', `attachment; filename="nema-report-${period.from}_to_${period.to}${filenameSuffix}.csv"`);
   res.send(csv);
 }

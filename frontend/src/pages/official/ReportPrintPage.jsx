@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
+import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
 import * as ReportAPI from '../../api/reports.js';
 
 function pct(rate) {
@@ -15,6 +15,7 @@ function fmtHrs(h) {
 export default function ReportPrintPage() {
   const { id }     = useParams();
   const navigate   = useNavigate();
+  const [searchParams] = useSearchParams();
   const [report,   setReport]  = useState(null);
   const [loading,  setLoading] = useState(true);
   const [notFound, setNotFound] = useState(false);
@@ -32,6 +33,23 @@ export default function ReportPrintPage() {
 
   const summary = report.summary_json;
   const { period, pickups, complaints, generatedAt } = summary;
+
+  // Optional view scope from query params (?scope=collector&entityId=3). No params = full report.
+  const scopeParam = searchParams.get('scope');
+  const entityIdParam = searchParams.get('entityId');
+  const entityId = entityIdParam != null && entityIdParam !== '' ? Number(entityIdParam) : null;
+  const scopedCollector = scopeParam === 'collector' && Number.isFinite(entityId)
+    ? pickups.byCollector.find(c => c.collector_id === entityId) ?? null
+    : null;
+  const scopedZone = scopeParam === 'zone' && Number.isFinite(entityId)
+    ? pickups.byZone.find(z => z.zone_id === entityId) ?? null
+    : null;
+  const isScoped = Boolean(scopedCollector || scopedZone);
+  const scopeLabel = scopedCollector
+    ? `Collector — ${scopedCollector.company_name}`
+    : scopedZone
+    ? `Zone — ${scopedZone.zone_name}`
+    : null;
 
   return (
     <>
@@ -73,92 +91,109 @@ export default function ReportPrintPage() {
                 <td style={ps.metaKey}>Generated on</td>
                 <td style={ps.metaVal}>{new Date(generatedAt).toLocaleString()}</td>
               </tr>
+              {scopeLabel && (
+                <tr>
+                  <td style={ps.metaKey}>Scope</td>
+                  <td style={ps.metaVal}>{scopeLabel}</td>
+                </tr>
+              )}
             </tbody>
           </table>
           <div style={ps.divider} />
         </div>
 
-        {/* Overall summary */}
-        <section style={ps.section}>
-          <h2 style={ps.h2}>Overall Summary</h2>
-          <div style={ps.summaryGrid}>
-            <SummaryItem label="Total pickups"    value={pickups.overall.total} />
-            <SummaryItem label="Completed"        value={pickups.overall.completed} />
-            <SummaryItem label="Missed"           value={pickups.overall.total - pickups.overall.completed} />
-            <SummaryItem label="Completion rate"  value={pct(pickups.overall.completionRate)} />
-            <SummaryItem label="Total complaints" value={complaints.overall.total} />
-            <SummaryItem label="Resolved"         value={complaints.overall.resolved} />
-            <SummaryItem label="Open"             value={complaints.overall.open} />
-            <SummaryItem label="Avg resolution"   value={fmtHrs(complaints.overall.avg_resolution_hours)} />
-          </div>
-        </section>
+        {/* Overall summary — full report only */}
+        {!isScoped && (
+          <section style={ps.section}>
+            <h2 style={ps.h2}>Overall Summary</h2>
+            <div style={ps.summaryGrid}>
+              <SummaryItem label="Total pickups"    value={pickups.overall.total} />
+              <SummaryItem label="Completed"        value={pickups.overall.completed} />
+              <SummaryItem label="Missed"           value={pickups.overall.total - pickups.overall.completed} />
+              <SummaryItem label="Completion rate"  value={pct(pickups.overall.completionRate)} />
+              <SummaryItem label="Total complaints" value={complaints.overall.total} />
+              <SummaryItem label="Resolved"         value={complaints.overall.resolved} />
+              <SummaryItem label="Open"             value={complaints.overall.open} />
+              <SummaryItem label="Avg resolution"   value={fmtHrs(complaints.overall.avg_resolution_hours)} />
+            </div>
+          </section>
+        )}
 
-        {/* Collector performance */}
-        <section style={ps.section}>
-          <h2 style={ps.h2}>Collector Performance</h2>
-          {pickups.byCollector.length === 0 ? (
-            <p style={ps.none}>No pickup data for this period.</p>
-          ) : (
-            <table className="print-table" style={ps.table}>
-              <thead>
-                <tr>
-                  {['Collector', 'Scheduled', 'Completed', 'Missed', 'Completion Rate'].map(h => (
-                    <th key={h} style={ps.th}>{h}</th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody>
-                {pickups.byCollector.map(r => (
-                  <tr key={r.collector_id} style={ps.tr}>
-                    <td style={{ ...ps.td, fontWeight: 600 }}>{r.company_name}</td>
-                    <td style={ps.tdNum}>{r.total}</td>
-                    <td style={ps.tdNum}>{r.completed}</td>
-                    <td style={ps.tdNum}>{r.missed}</td>
-                    <td style={ps.tdNum}>{pct(r.completionRate)}</td>
+        {/* Collector performance — full report OR collector scope */}
+        {!scopedZone && (
+          <section style={ps.section}>
+            <h2 style={ps.h2}>Collector Performance</h2>
+            {(scopedCollector ? [scopedCollector] : pickups.byCollector).length === 0 ? (
+              <p style={ps.none}>No pickup data for this period.</p>
+            ) : (
+              <table className="print-table" style={ps.table}>
+                <thead>
+                  <tr>
+                    {['Collector', 'Scheduled', 'Completed', 'Missed', 'Completion Rate'].map(h => (
+                      <th key={h} style={ps.th}>{h}</th>
+                    ))}
                   </tr>
-                ))}
-              </tbody>
-            </table>
-          )}
-        </section>
-
-        {/* Zone performance */}
-        <section style={ps.section}>
-          <h2 style={ps.h2}>Zone Performance</h2>
-          {pickups.byZone.length === 0 ? (
-            <p style={ps.none}>No zone data for this period.</p>
-          ) : (
-            <table className="print-table" style={ps.table}>
-              <thead>
-                <tr>
-                  {['Zone', 'Scheduled', 'Completed', 'Missed', 'Completion Rate', 'Complaints', 'Resolved', 'Avg Resolution'].map(h => (
-                    <th key={h} style={ps.th}>{h}</th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody>
-                {pickups.byZone.map(zp => {
-                  const zc = complaints.byZone.find(z => z.zone_id === zp.zone_id) ?? {};
-                  return (
-                    <tr key={zp.zone_id} style={ps.tr}>
-                      <td style={{ ...ps.td, fontWeight: 600 }}>{zp.zone_name}</td>
-                      <td style={ps.tdNum}>{zp.total}</td>
-                      <td style={ps.tdNum}>{zp.completed}</td>
-                      <td style={ps.tdNum}>{zp.missed}</td>
-                      <td style={ps.tdNum}>{pct(zp.completionRate)}</td>
-                      <td style={ps.tdNum}>{zc.total ?? 0}</td>
-                      <td style={ps.tdNum}>{zc.resolved ?? 0}</td>
-                      <td style={ps.tdNum}>{fmtHrs(zc.avg_resolution_hours)}</td>
+                </thead>
+                <tbody>
+                  {(scopedCollector ? [scopedCollector] : pickups.byCollector).map(r => (
+                    <tr key={r.collector_id} style={ps.tr}>
+                      <td style={{ ...ps.td, fontWeight: 600 }}>{r.company_name}</td>
+                      <td style={ps.tdNum}>{r.total}</td>
+                      <td style={ps.tdNum}>{r.completed}</td>
+                      <td style={ps.tdNum}>{r.missed}</td>
+                      <td style={ps.tdNum}>{pct(r.completionRate)}</td>
                     </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          )}
-        </section>
+                  ))}
+                </tbody>
+              </table>
+            )}
+            {scopedCollector && (
+              <p style={{ ...ps.none, marginTop: '0.75rem', fontStyle: 'italic' }}>
+                Complaints are tracked per zone, not per collector.
+              </p>
+            )}
+          </section>
+        )}
 
-        {/* Complaints by category */}
-        {complaints.byCategory?.length > 0 && (
+        {/* Zone performance — full report OR zone scope */}
+        {!scopedCollector && (
+          <section style={ps.section}>
+            <h2 style={ps.h2}>Zone Performance</h2>
+            {(scopedZone ? [scopedZone] : pickups.byZone).length === 0 ? (
+              <p style={ps.none}>No zone data for this period.</p>
+            ) : (
+              <table className="print-table" style={ps.table}>
+                <thead>
+                  <tr>
+                    {['Zone', 'Scheduled', 'Completed', 'Missed', 'Completion Rate', 'Complaints', 'Resolved', 'Avg Resolution'].map(h => (
+                      <th key={h} style={ps.th}>{h}</th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {(scopedZone ? [scopedZone] : pickups.byZone).map(zp => {
+                    const zc = complaints.byZone.find(z => z.zone_id === zp.zone_id) ?? {};
+                    return (
+                      <tr key={zp.zone_id} style={ps.tr}>
+                        <td style={{ ...ps.td, fontWeight: 600 }}>{zp.zone_name}</td>
+                        <td style={ps.tdNum}>{zp.total}</td>
+                        <td style={ps.tdNum}>{zp.completed}</td>
+                        <td style={ps.tdNum}>{zp.missed}</td>
+                        <td style={ps.tdNum}>{pct(zp.completionRate)}</td>
+                        <td style={ps.tdNum}>{zc.total ?? 0}</td>
+                        <td style={ps.tdNum}>{zc.resolved ?? 0}</td>
+                        <td style={ps.tdNum}>{fmtHrs(zc.avg_resolution_hours)}</td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            )}
+          </section>
+        )}
+
+        {/* Complaints by category — full report only */}
+        {!isScoped && complaints.byCategory?.length > 0 && (
           <section style={ps.section}>
             <h2 style={ps.h2}>Complaints by Category</h2>
             <table className="print-table" style={ps.table}>
