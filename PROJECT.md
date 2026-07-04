@@ -24,9 +24,11 @@ Three distinct user roles share one interface:
 | **View** | React.js (Vite) + React Router | Component-based SPA |
 | **Controller** | Node.js + Express.js | REST API, ES modules |
 | **Model** | PostgreSQL + `pg` driver | Parameterized queries only — no ORM |
-| **Auth** | JWT + bcrypt + RBAC | Added in Step 3 |
+| **Auth** | JWT + bcrypt + RBAC + email-OTP 2FA | 2FA added as an add-on |
+| **Email** | Nodemailer (SMTP) | Optional SMTP; console fallback in dev |
 
 **This stack is locked. Do not introduce ORMs, GraphQL, or alternative runtimes.**
+(Nodemailer added for transactional email — a library, not a new runtime.)
 
 ---
 
@@ -73,6 +75,7 @@ backend/src/config/db.js    →  Database connection pool
 | **Add-on — Collector "My Residents" view** | Read-only view letting a collector see residents in their assigned zones, derived through `zones.assigned_collector_id` (no direct collector↔resident link). `GET /api/collectors/me/residents` (collector-only, ownership resolved from JWT — never a request param); returns name + zone only (no email/role/PII); `MyResidentsPage` grouped by zone with loading/empty/error states | ✅ Complete |
 | **Add-on — Resident zone & contact at registration** | Residents choose their collection zone and enter a contact phone during registration; the dashboard shows the zone **read-only** (editable only from the Profile modal). New nullable `users.contact_phone` column (migration 011); public `GET /api/zones/public` (unauthenticated, id + name only) feeds the registration dropdown; `POST /api/auth/register` accepts+validates `zone_id`/`contact_phone` (role still hardcoded `'resident'`); `PATCH /api/users/me` persists resident zone_id + contact_phone on the users row; `PATCH /api/users/me/zone` left intact | ✅ Complete |
 | **Add-on — Licence expiry tracking & renewal reminders** | Delivers the proposal's FR-03 licence-renewal promise via **in-app surfacing** (no email/SMS). One source of truth in `utils/dates.js`: `licenceStatus(license_expiry)` → `{ status, days_to_expiry }` (`none`/`valid`/`expiring_soon`/`expired`, threshold `LICENCE_EXPIRY_WARN_DAYS = 30`, date-only UTC), unit-tested. Official-facing + own-facing collector responses (`list`/`getOne`/`getMyProfile`) are enriched additively with `license_status` + `days_to_expiry`; public projections still omit all licence data. Officials get a status **badge** column on the Collectors register (sorted expired→expiring→valid→not-set) and a dashboard alert ("N expired · M expiring soon" → /collectors, active-only); collectors see a renewal **banner** on their dashboard + expiry/status in their profile. No email/SMS (noted as future work) | ✅ Complete |
+| **Add-on — Email notifications & 2FA** | **(a) Email-OTP two-factor auth:** login is now two-step — `POST /api/auth/login` verifies the password then emails a 6-digit code (no token yet); `POST /api/auth/verify-otp` checks it (sha256-hashed, single-use, 10-min expiry, 5-attempt cap, timing-safe compare) and issues the JWT; `POST /api/auth/resend-otp`. Codes stored hashed in `login_codes` (migration 012). Gated by `MFA_ENABLED` (default true; off in test env). Two-step LoginPage UI with resend / use-different-account. **(b) Scoped email notifications** (only people an event concerns): complaint filed → resident (confirmation) + assigned collector + officials; complaint status change → the resident; schedule assigned → the collector; resident registration → welcome. Nodemailer SMTP with a console-logging dev fallback (`SMTP_HOST` optional); all sends fire-and-forget so mail never breaks the request. `services/notifications.js` + `utils/mailer.js`; `UserModel.findByRole` for official fan-out | ✅ Complete |
 | **Code Review — Security & Quality** | External code review fixes + improvements (see below) | ✅ Complete |
 
 ### Code Review Fixes Applied
@@ -94,6 +97,9 @@ backend/src/config/db.js    →  Database connection pool
 **Known tradeoffs (not bugs):**
 - JWT stored in `localStorage` (not httpOnly cookies) — deliberate simplicity tradeoff; adds CSRF complexity without meaningful security gain at this scale.
 - Migrations are forward-only — no `down.sql` convention; rollbacks are manual (write the reverse SQL by hand).
+- 2FA depends on email delivery: if SMTP is unconfigured/unreachable, users can't receive codes. Mitigated by the console dev-fallback and the `MFA_ENABLED` toggle. Set real SMTP creds in `.env` for production.
+- Registration auto-logs-in the new resident **without** an OTP round-trip (account is created in person); every subsequent login for an existing account still requires the second factor.
+- Email OTP is emailed in plaintext (stored hashed at rest); acceptable for this scale, weaker than a TOTP authenticator app.
 
 ---
 

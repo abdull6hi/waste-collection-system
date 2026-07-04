@@ -1,7 +1,7 @@
 import { Router } from 'express';
 import { body } from 'express-validator';
 import { rateLimit } from 'express-rate-limit';
-import { register, login, me } from '../controllers/auth.controller.js';
+import { register, login, verifyOtp, resendOtp, me } from '../controllers/auth.controller.js';
 import { authenticate } from '../middleware/auth.middleware.js';
 import { validate } from '../middleware/validate.middleware.js';
 
@@ -31,8 +31,20 @@ const loginRules = [
   body('password').notEmpty().withMessage('password is required'),
 ];
 
-router.post('/register', authLimiter, registerRules, validate, register);
-router.post('/login',    authLimiter, loginRules,    validate, login);
+const verifyOtpRules = [
+  body('email').isEmail().withMessage('A valid email address is required'),
+  body('code').isLength({ min: 6, max: 6 }).withMessage('code must be 6 digits')
+    .isNumeric().withMessage('code must be numeric'),
+];
+
+const resendOtpRules = [
+  body('email').isEmail().withMessage('A valid email address is required'),
+];
+
+router.post('/register',   authLimiter, registerRules,  validate, register);
+router.post('/login',      authLimiter, loginRules,     validate, login);
+router.post('/verify-otp', authLimiter, verifyOtpRules, validate, verifyOtp);
+router.post('/resend-otp', authLimiter, resendOtpRules, validate, resendOtp);
 router.get('/me', authenticate, me);
 
 export default router;

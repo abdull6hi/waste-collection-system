@@ -25,6 +25,15 @@ export async function findById(id) {
   return rows[0] ?? null;
 }
 
+/** All users with a given role — used to fan out notifications (e.g. to officials). */
+export async function findByRole(role) {
+  const { rows } = await query(
+    'SELECT id, name, email FROM users WHERE role = $1 ORDER BY id',
+    [role]
+  );
+  return rows;
+}
+
 export async function create({ name, email, password_hash, role, zone_id, contact_phone }) {
   const { rows } = await query(
     `INSERT INTO users (name, email, password_hash, role, zone_id, contact_phone)

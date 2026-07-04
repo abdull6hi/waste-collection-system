@@ -8,28 +8,75 @@ export default function LoginPage() {
   const { login } = useAuth();
   const navigate   = useNavigate();
 
+  const [step, setStep]     = useState('credentials'); // 'credentials' | 'otp'
   const [form, setForm]     = useState({ email: '', password: '' });
+  const [code, setCode]     = useState('');
   const [error, setError]   = useState('');
+  const [info, setInfo]     = useState('');
   const [loading, setLoading] = useState(false);
+  const [resending, setResending] = useState(false);
 
   function handleChange(e) {
     setForm(f => ({ ...f, [e.target.name]: e.target.value }));
   }
 
-  async function handleSubmit(e) {
+  async function handleCredentials(e) {
     e.preventDefault();
     setError('');
     setLoading(true);
     try {
       const res = await client.post('/api/auth/login', form);
-      login(res.data.token, res.data.user);
-      navigate('/dashboard');
+      if (res.data.token) {
+        // 2FA disabled — logged in directly.
+        login(res.data.token, res.data.user);
+        navigate('/dashboard');
+        return;
+      }
+      // 2FA enabled — move to code entry.
+      setInfo(res.data.message || `We've sent a verification code to ${form.email}.`);
+      setStep('otp');
     } catch (err) {
-      const msg = extractError(err, 'Login failed');
-      setError(msg);
+      setError(extractError(err, 'Login failed'));
     } finally {
       setLoading(false);
     }
+  }
+
+  async function handleVerify(e) {
+    e.preventDefault();
+    setError('');
+    setLoading(true);
+    try {
+      const res = await client.post('/api/auth/verify-otp', { email: form.email, code });
+      login(res.data.token, res.data.user);
+      navigate('/dashboard');
+    } catch (err) {
+      setError(extractError(err, 'Verification failed'));
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function handleResend() {
+    setError('');
+    setResending(true);
+    try {
+      await client.post('/api/auth/resend-otp', { email: form.email });
+      toast.success('A new code has been sent');
+      setInfo(`A new verification code has been sent to ${form.email}.`);
+      setCode('');
+    } catch (err) {
+      setError(extractError(err, 'Could not resend code'));
+    } finally {
+      setResending(false);
+    }
+  }
+
+  function backToCredentials() {
+    setStep('credentials');
+    setCode('');
+    setError('');
+    setInfo('');
   }
 
   return (
@@ -39,41 +86,84 @@ export default function LoginPage() {
           <span style={styles.logoIcon}>♻</span>
           <span style={styles.logoText}>WasteCoord</span>
         </div>
-        <h1 style={styles.title}>Sign in</h1>
-        <p style={styles.sub}>Welcome back — sign in to your account</p>
 
-        <form onSubmit={handleSubmit} style={styles.form}>
-          <label style={styles.label} htmlFor="login-email">Email address
-            <input
-              id="login-email"
-              type="email" name="email" required autoComplete="email"
-              value={form.email} onChange={handleChange}
-              style={styles.input}
-              placeholder="you@example.com"
-            />
-          </label>
+        {step === 'credentials' ? (
+          <>
+            <h1 style={styles.title}>Sign in</h1>
+            <p style={styles.sub}>Welcome back — sign in to your account</p>
 
-          <label style={styles.label} htmlFor="login-password">Password
-            <input
-              id="login-password"
-              type="password" name="password" required autoComplete="current-password"
-              value={form.password} onChange={handleChange}
-              style={styles.input}
-              placeholder="••••••••"
-            />
-          </label>
+            <form onSubmit={handleCredentials} style={styles.form}>
+              <label style={styles.label} htmlFor="login-email">Email address
+                <input
+                  id="login-email"
+                  type="email" name="email" required autoComplete="email"
+                  value={form.email} onChange={handleChange}
+                  style={styles.input}
+                  placeholder="you@example.com"
+                />
+              </label>
 
-          {error && <p role="alert" style={styles.error}>{error}</p>}
+              <label style={styles.label} htmlFor="login-password">Password
+                <input
+                  id="login-password"
+                  type="password" name="password" required autoComplete="current-password"
+                  value={form.password} onChange={handleChange}
+                  style={styles.input}
+                  placeholder="••••••••"
+                />
+              </label>
 
-          <button type="submit" disabled={loading} style={styles.btn}>
-            {loading ? 'Signing in…' : 'Sign in'}
-          </button>
-        </form>
+              {error && <p role="alert" style={styles.error}>{error}</p>}
 
-        <p style={styles.footer}>
-          Don't have an account?{' '}
-          <Link to="/register" style={styles.link}>Create one</Link>
-        </p>
+              <button type="submit" disabled={loading} style={styles.btn}>
+                {loading ? 'Signing in…' : 'Sign in'}
+              </button>
+            </form>
+
+            <p style={styles.footer}>
+              Don't have an account?{' '}
+              <Link to="/register" style={styles.link}>Create one</Link>
+            </p>
+          </>
+        ) : (
+          <>
+            <h1 style={styles.title}>Enter your code</h1>
+            <p style={styles.sub}>
+              For your security, we've emailed a 6-digit code to{' '}
+              <strong style={{ color: '#374151' }}>{form.email}</strong>. Enter it below to finish signing in.
+            </p>
+
+            <form onSubmit={handleVerify} style={styles.form}>
+              <label style={styles.label} htmlFor="login-code">Verification code
+                <input
+                  id="login-code"
+                  type="text" inputMode="numeric" autoComplete="one-time-code"
+                  required maxLength={6} pattern="[0-9]{6}" autoFocus
+                  value={code}
+                  onChange={e => setCode(e.target.value.replace(/\D/g, '').slice(0, 6))}
+                  style={{ ...styles.input, ...styles.codeInput }}
+                  placeholder="000000"
+                />
+              </label>
+
+              {info && <p style={styles.info}>{info}</p>}
+              {error && <p role="alert" style={styles.error}>{error}</p>}
+
+              <button type="submit" disabled={loading || code.length !== 6} style={styles.btn}>
+                {loading ? 'Verifying…' : 'Verify & sign in'}
+              </button>
+            </form>
+
+            <div style={styles.otpActions}>
+              <button type="button" onClick={handleResend} disabled={resending} style={styles.linkBtn}>
+                {resending ? 'Sending…' : 'Resend code'}
+              </button>
+              <button type="button" onClick={backToCredentials} style={styles.linkBtn}>
+                Use a different account
+              </button>
+            </div>
+          </>
+        )}
       </div>
     </div>
   );
@@ -101,7 +191,7 @@ const styles = {
   logoIcon: { fontSize: '1.8rem' },
   logoText: { fontWeight: 700, fontSize: '1.1rem', color: '#15803d' },
   title: { fontSize: '1.6rem', fontWeight: 700, color: '#111827', marginBottom: '0.25rem' },
-  sub:   { color: '#6b7280', fontSize: '0.9rem', marginBottom: '1.75rem' },
+  sub:   { color: '#6b7280', fontSize: '0.9rem', marginBottom: '1.75rem', lineHeight: 1.5 },
   form:  { display: 'flex', flexDirection: 'column', gap: '1.1rem' },
   label: {
     display: 'flex', flexDirection: 'column', gap: '0.4rem',
@@ -115,6 +205,13 @@ const styles = {
     outline: 'none',
     transition: 'border-color 150ms',
     fontFamily: 'inherit',
+  },
+  codeInput: {
+    letterSpacing: '0.5em',
+    textAlign: 'center',
+    fontSize: '1.4rem',
+    fontWeight: 600,
+    paddingLeft: '0.5em', // offset the trailing letter-spacing so digits look centred
   },
   btn: {
     marginTop: '0.25rem',
@@ -136,6 +233,22 @@ const styles = {
     padding: '0.6rem 0.85rem',
     color: '#dc2626',
     fontSize: '0.875rem',
+  },
+  info: {
+    background: '#f0fdf4',
+    border: '1px solid #bbf7d0',
+    borderRadius: '0.5rem',
+    padding: '0.6rem 0.85rem',
+    color: '#15803d',
+    fontSize: '0.85rem',
+  },
+  otpActions: {
+    display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+    marginTop: '1.25rem', gap: '0.5rem',
+  },
+  linkBtn: {
+    background: 'none', border: 'none', padding: 0, cursor: 'pointer',
+    color: '#16a34a', fontWeight: 600, fontSize: '0.85rem', fontFamily: 'inherit',
   },
   footer: { textAlign: 'center', marginTop: '1.5rem', fontSize: '0.875rem', color: '#6b7280' },
   link:   { color: '#16a34a', fontWeight: 600 },

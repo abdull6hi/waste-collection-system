@@ -1,6 +1,7 @@
 // Manages recurring collection schedules (zone + collector + day/time/frequency).
 import * as ScheduleModel  from '../models/schedule.model.js';
 import * as CollectorModel from '../models/collector.model.js';
+import * as Notifications  from '../services/notifications.js';
 
 export async function list(req, res) {
   const { zoneId, collectorId } = req.query;
@@ -20,6 +21,10 @@ export async function getOne(req, res) {
 export async function create(req, res) {
   const { zone_id, collector_id, day_of_week, start_time, frequency } = req.body;
   const schedule = await ScheduleModel.create({ zone_id, collector_id, day_of_week, start_time, frequency });
+
+  // Notify the collector this schedule was assigned to (fire-and-forget).
+  Notifications.scheduleCreated(schedule);
+
   res.status(201).json({ schedule });
 }
 

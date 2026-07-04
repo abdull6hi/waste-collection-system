@@ -2,6 +2,7 @@
 import * as ComplaintModel from '../models/complaint.model.js';
 import * as CollectorModel from '../models/collector.model.js';
 import * as ZoneModel      from '../models/zone.model.js';
+import * as Notifications  from '../services/notifications.js';
 import { assertOwnsComplaint } from '../middleware/ownership.js';
 
 export async function submit(req, res) {
@@ -17,6 +18,9 @@ export async function submit(req, res) {
     description,
     assignedCollectorId: zone.assigned_collector_id ?? null,
   });
+
+  // Notify the resident, the assigned collector, and officials (fire-and-forget).
+  Notifications.complaintSubmitted(complaint);
 
   res.status(201).json({ complaint });
 }
@@ -89,6 +93,9 @@ export async function updateStatus(req, res) {
     resolutionNotes: resolution_notes ?? null,
     resolvedAt,
   });
+
+  // Notify the resident who filed it that their complaint changed status.
+  Notifications.complaintStatusChanged(updated);
 
   res.json({ complaint: updated });
 }
