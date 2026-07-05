@@ -88,6 +88,72 @@ describe('GET /api/reports/:id/export.csv — export format (TC-21)', () => {
   });
 });
 
+describe('GET /api/reports/:id/export.csv — scoped exports', () => {
+  it('collector scope: single Collector Performance section, no Zone/Overall/Complaint sections', async () => {
+    const genRes = await request(app)
+      .post('/api/reports/generate')
+      .set('Authorization', `Bearer ${officialToken}`)
+      .send({ from: today, to: today });
+    const reportId = genRes.body.report.id;
+
+    const res = await request(app)
+      .get(`/api/reports/${reportId}/export.csv`)
+      .query({ scope: 'collector', entityId: collector.id })
+      .set('Authorization', `Bearer ${officialToken}`);
+
+    expect(res.status).toBe(200);
+    expect(res.headers['content-type']).toMatch(/text\/csv/);
+    expect(res.headers['content-disposition']).toMatch(new RegExp(`-collector-${collector.id}\\.csv"$`));
+    expect(res.text).toContain('Collector Performance');
+    expect(res.text).toContain('Note: Complaints are tracked per zone, not per collector.');
+    expect(res.text).not.toContain('Zone Performance');
+    expect(res.text).not.toContain('Overall Summary');
+    expect(res.text).not.toContain('Complaint Summary');
+  });
+
+  it('zone scope: single Zone Performance section (incl. complaint stats), no Collector/Overall sections', async () => {
+    const genRes = await request(app)
+      .post('/api/reports/generate')
+      .set('Authorization', `Bearer ${officialToken}`)
+      .send({ from: today, to: today });
+    const reportId = genRes.body.report.id;
+
+    const res = await request(app)
+      .get(`/api/reports/${reportId}/export.csv`)
+      .query({ scope: 'zone', entityId: zone.id })
+      .set('Authorization', `Bearer ${officialToken}`);
+
+    expect(res.status).toBe(200);
+    expect(res.headers['content-type']).toMatch(/text\/csv/);
+    expect(res.headers['content-disposition']).toMatch(new RegExp(`-zone-${zone.id}\\.csv"$`));
+    expect(res.text).toContain('Zone Performance');
+    expect(res.text).toContain('Complaints,Resolved,Avg Resolution (hrs)');
+    expect(res.text).not.toContain('Collector Performance');
+    expect(res.text).not.toContain('Overall Summary');
+    expect(res.text).not.toContain('Complaint Summary');
+  });
+
+  it('unrecognized scope falls back to the full report (no filename suffix)', async () => {
+    const genRes = await request(app)
+      .post('/api/reports/generate')
+      .set('Authorization', `Bearer ${officialToken}`)
+      .send({ from: today, to: today });
+    const reportId = genRes.body.report.id;
+
+    const res = await request(app)
+      .get(`/api/reports/${reportId}/export.csv`)
+      .query({ scope: 'bogus', entityId: collector.id })
+      .set('Authorization', `Bearer ${officialToken}`);
+
+    expect(res.status).toBe(200);
+    expect(res.headers['content-disposition']).not.toMatch(/-collector-|-zone-/);
+    expect(res.text).toContain('Overall Summary');
+    expect(res.text).toContain('Collector Performance');
+    expect(res.text).toContain('Zone Performance');
+    expect(res.text).toContain('Complaint Summary');
+  });
+});
+
 describe('Report endpoints — restricted to officials (TC-22)', () => {
   it('rejects a resident (403)', async () => {
     const res = await request(app)
